@@ -1,0 +1,163 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "TanStack Query",
+  "projectDescription": "Powerful asynchronous state management and data fetching for React, Vue, Solid, Svelte, Angular, and Preact.",
+  "theme": "palm",
+  "primaryColor": "#00C8C8",
+  "lightColor": "#00E5E5",
+  "darkColor": "#00A0A0",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/queries",
+              "concepts/mutations",
+              "concepts/query-keys",
+              "concepts/query-functions",
+              "concepts/caching",
+              "concepts/invalidation"
+            ]
+          },
+          {
+            "group": "Framework Guides",
+            "pages": [
+              "frameworks/react",
+              "frameworks/vue",
+              "frameworks/solid",
+              "frameworks/svelte",
+              "frameworks/angular",
+              "frameworks/preact"
+            ]
+          },
+          {
+            "group": "Advanced Topics",
+            "pages": [
+              "guides/infinite-queries",
+              "guides/paginated-queries",
+              "guides/optimistic-updates",
+              "guides/ssr",
+              "guides/prefetching",
+              "guides/devtools",
+              "guides/persistence",
+              "guides/testing"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Core API",
+            "pages": [
+              "api/query-client",
+              "api/query-cache",
+              "api/mutation-cache",
+              "api/query-observer",
+              "api/infinite-query-observer",
+              "api/queries-observer"
+            ]
+          },
+          {
+            "group": "React",
+            "pages": [
+              "api/react/use-query",
+              "api/react/use-mutation",
+              "api/react/use-infinite-query",
+              "api/react/use-queries",
+              "api/react/use-suspense-query",
+              "api/react/query-client-provider"
+            ]
+          },
+          {
+            "group": "Vue",
+            "pages": [
+              "api/vue/use-query",
+              "api/vue/use-mutation",
+              "api/vue/use-infinite-query",
+              "api/vue/use-queries"
+            ]
+          },
+          {
+            "group": "Solid",
+            "pages": [
+              "api/solid/create-query",
+              "api/solid/create-mutation",
+              "api/solid/create-infinite-query"
+            ]
+          },
+          {
+            "group": "Svelte",
+            "pages": [
+              "api/svelte/create-query",
+              "api/svelte/create-mutation",
+              "api/svelte/create-infinite-query"
+            ]
+          },
+          {
+            "group": "Angular",
+            "pages": [
+              "api/angular/inject-query",
+              "api/angular/inject-mutation",
+              "api/angular/inject-infinite-query"
+            ]
+          },
+          {
+            "group": "Utilities",
+            "pages": [
+              "api/utilities/focus-manager",
+              "api/utilities/online-manager",
+              "api/utilities/notify-manager",
+              "api/utilities/timeout-manager"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Multi-framework support (React, Vue, Solid, Svelte, Angular, Preact)",
+    "Automatic caching and background refetching",
+    "Mutations with optimistic updates",
+    "Infinite queries and pagination",
+    "SSR and hydration support",
+    "DevTools for debugging",
+    "TypeScript support",
+    "Protocol-agnostic (REST, GraphQL, etc.)"
+  ],
+  "publicApiSurface": [
+    "QueryClient",
+    "QueryCache",
+    "MutationCache",
+    "QueryObserver",
+    "InfiniteQueryObserver",
+    "QueriesObserver",
+    "useQuery",
+    "useMutation",
+    "useInfiniteQuery",
+    "useQueries",
+    "useSuspenseQuery",
+    "QueryClientProvider",
+    "focusManager",
+    "onlineManager",
+    "notifyManager",
+    "timeoutManager",
+    "dehydrate",
+    "hydrate",
+    "queryOptions",
+    "infiniteQueryOptions",
+    "mutationOptions"
+  ]
+}
