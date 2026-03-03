@@ -1,0 +1,135 @@
+---
+title: TanStack Query - Powerful Async State Management
+description: Simplify fetching, caching, synchronizing, and updating server state in your web applications with TanStack Query.
+---
+
+# TanStack Query
+
+TanStack Query is an async state management library that simplifies fetching, caching, synchronizing, and updating server state in your web applications. Built to work seamlessly across React, Vue, Solid, Svelte, Angular, and Preact, it eliminates the complexity of managing server state manually.
+
+## Why TanStack Query?
+
+Server state is fundamentally different from client state. It's:
+
+- Remotely persisted in a location you don't control
+- Requires asynchronous APIs for fetching and updating
+- Shared across multiple users and potentially out of date
+- Challenging to keep in sync with your UI
+
+TanStack Query solves these challenges by providing a robust, framework-agnostic solution for async state management.
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="Automatic Caching" icon="database">
+    Intelligent caching system that automatically stores and reuses query results, reducing unnecessary network requests.
+  </Card>
+  
+  <Card title="Background Refetching" icon="refresh">
+    Automatically refetches data in the background to keep your UI fresh without disrupting the user experience.
+  </Card>
+  
+  <Card title="Window Focus Refetching" icon="window">
+    Refetches stale data when users return to your application, ensuring they always see the latest information.
+  </Card>
+  
+  <Card title="Automatic Retries" icon="rotate">
+    Built-in retry logic with exponential backoff for failed requests, making your app resilient to network issues.
+  </Card>
+  
+  <Card title="Pagination & Infinite Scroll" icon="list">
+    First-class support for paginated queries and infinite scroll patterns with minimal configuration.
+  </Card>
+  
+  <Card title="Request Deduplication" icon="merge">
+    Automatically deduplicates identical requests happening at the same time, optimizing network usage.
+  </Card>
+  
+  <Card title="Optimistic Updates" icon="bolt">
+    Update your UI optimistically before mutations complete, providing instant feedback to users.
+  </Card>
+  
+  <Card title="Devtools" icon="bug">
+    Powerful development tools for debugging and visualizing your query cache and network activity.
+  </Card>
+</CardGroup>
+
+## Protocol Agnostic
+
+TanStack Query works with any asynchronous data source:
+
+- REST APIs
+- GraphQL endpoints
+- WebSockets
+- Server-Sent Events
+- Any promise-based async function
+
+You're in complete control of how you fetch your data.
+
+## Framework Support
+
+TanStack Query provides dedicated packages for all major frameworks:
+
+- **React** - Hooks-based API with full React 18+ support
+- **Vue** - Compatible with Vue 2.6+, 2.7, and Vue 3
+- **Solid** - Native primitives for SolidJS
+- **Svelte** - Designed for Svelte 5+
+- **Angular** - Signal-based API for Angular 16+
+- **Preact** - Full compatibility with Preact 10+
+
+## Get Started
+
+<CardGroup cols={3}>
+  <Card title="Installation" icon="download" href="/installation">
+    Install TanStack Query for your framework
+  </Card>
+  
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Build your first query in minutes
+  </Card>
+  
+  <Card title="Core Concepts" icon="book" href="/core-concepts">
+    Learn the fundamental concepts
+  </Card>
+</CardGroup>
+
+## Example
+
+Here's a glimpse of how simple TanStack Query makes async state management:
+
+```tsx
+import { useQuery } from '@tanstack/react-query'
+
+function RepoData() {
+  const { data, isPending, error } = useQuery({
+    queryKey: ['repo'],
+    queryFn: async () => {
+      const response = await fetch('https://api.github.com/repos/TanStack/query')
+      return response.json()
+    },
+  })
+
+  if (isPending) return 'Loading...'
+  if (error) return 'An error occurred: ' + error.message
+
+  return (
+    <div>
+      <h1>{data.full_name}</h1>
+      <p>{data.description}</p>
+      <strong>⭐ {data.stargazers_count}</strong>
+    </div>
+  )
+}
+```
+
+With just a few lines of code, you get automatic caching, background refetching, error handling, loading states, and more.
+
+## Community & Support
+
+- **GitHub Discussions** - Ask questions and share ideas
+- **Discord** - Chat with the community in real-time
+- **GitHub Issues** - Report bugs and request features
+
+<Tip>
+  TanStack Query is part of the larger TanStack ecosystem, which includes libraries for routing, tables, forms, virtualization, and more.
+</Tip>

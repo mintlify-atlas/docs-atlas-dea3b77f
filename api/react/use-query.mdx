@@ -1,0 +1,320 @@
+---
+title: useQuery
+description: React hook for fetching and caching data
+---
+
+# useQuery
+
+The `useQuery` hook is the primary way to fetch and cache data in TanStack Query. It subscribes to a query and returns the current state of the query.
+
+## Import
+
+```tsx
+import { useQuery } from '@tanstack/react-query'
+```
+
+## Signature
+
+```tsx
+function useQuery<
+  TQueryFnData = unknown,
+  TError = DefaultError,
+  TData = TQueryFnData,
+  TQueryKey extends QueryKey = QueryKey,
+>(
+  options: UseQueryOptions<TQueryFnData, TError, TData, TQueryKey>,
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError>
+```
+
+## Type Parameters
+
+<ParamField path="TQueryFnData" type="type" default="unknown">
+  The type of data returned by the query function
+</ParamField>
+
+<ParamField path="TError" type="type" default="DefaultError">
+  The type of error that can be thrown by the query function
+</ParamField>
+
+<ParamField path="TData" type="type" default="TQueryFnData">
+  The type of data returned by the select function (if provided), otherwise same as TQueryFnData
+</ParamField>
+
+<ParamField path="TQueryKey" type="type" default="QueryKey">
+  The type of the query key
+</ParamField>
+
+## Parameters
+
+<ParamField path="options" type="UseQueryOptions" required>
+  Configuration options for the query
+
+  <ParamField path="queryKey" type="TQueryKey" required>
+    A unique key for the query. Must be an array.
+  </ParamField>
+
+  <ParamField path="queryFn" type="QueryFunction<TQueryFnData, TQueryKey>">
+    The function that will be called to fetch data. Receives a `QueryFunctionContext` object.
+  </ParamField>
+
+  <ParamField path="enabled" type="boolean" default="true">
+    Set to `false` to disable automatic query execution
+  </ParamField>
+
+  <ParamField path="staleTime" type="number | ((query: Query) => number)" default="0">
+    Time in milliseconds after data is considered stale. Set to `Infinity` to disable automatic refetching.
+  </ParamField>
+
+  <ParamField path="gcTime" type="number" default="300000">
+    Time in milliseconds that unused/inactive cache data remains in memory. When a query's cache becomes unused or inactive, that cache data will be garbage collected after this duration.
+  </ParamField>
+
+  <ParamField path="refetchInterval" type="number | false | ((query: Query) => number | false)" default="false">
+    If set to a number, the query will continuously refetch at this frequency in milliseconds
+  </ParamField>
+
+  <ParamField path="refetchIntervalInBackground" type="boolean" default="false">
+    If set to `true`, the query will continue to refetch while the window is in the background
+  </ParamField>
+
+  <ParamField path="refetchOnWindowFocus" type="boolean | 'always' | ((query: Query) => boolean | 'always')" default="true">
+    If set to `true`, the query will refetch on window focus if the data is stale
+  </ParamField>
+
+  <ParamField path="refetchOnMount" type="boolean | 'always' | ((query: Query) => boolean | 'always')" default="true">
+    If set to `true`, the query will refetch on mount if the data is stale
+  </ParamField>
+
+  <ParamField path="refetchOnReconnect" type="boolean | 'always' | ((query: Query) => boolean | 'always')" default="true">
+    If set to `true`, the query will refetch on reconnect if the data is stale
+  </ParamField>
+
+  <ParamField path="retry" type="boolean | number | (failureCount: number, error: TError) => boolean" default="3">
+    Number of retry attempts or function to determine if a request should be retried
+  </ParamField>
+
+  <ParamField path="retryDelay" type="number | (retryAttempt: number, error: TError) => number">
+    Function that receives a retry attempt number and returns the delay to apply before the next attempt
+  </ParamField>
+
+  <ParamField path="select" type="(data: TQueryFnData) => TData">
+    Function to transform or select a part of the data returned by the query function
+  </ParamField>
+
+  <ParamField path="initialData" type="TQueryFnData | () => TQueryFnData">
+    If set, this value will be used as the initial data for the query (as long as the query hasn't been created or cached yet)
+  </ParamField>
+
+  <ParamField path="initialDataUpdatedAt" type="number | (() => number | undefined)">
+    If set, this value will be used as the time (in milliseconds) of when the initialData itself was last updated
+  </ParamField>
+
+  <ParamField path="placeholderData" type="TQueryFnData | (previousData: TData | undefined, previousQuery: Query | undefined) => TQueryFnData">
+    If set, this value will be used as the placeholder data for this particular query observer while the query is still in the pending state
+  </ParamField>
+
+  <ParamField path="structuralSharing" type="boolean | (oldData: unknown, newData: unknown) => unknown" default="true">
+    Set this to `false` to disable structural sharing between query results
+  </ParamField>
+
+  <ParamField path="throwOnError" type="boolean | (error: TError, query: Query) => boolean" default="false">
+    Set this to `true` if you want errors to be thrown in the render phase and propagate to the nearest error boundary
+  </ParamField>
+
+  <ParamField path="networkMode" type="'online' | 'always' | 'offlineFirst'" default="'online'">
+    Controls when the query function is allowed to execute
+  </ParamField>
+
+  <ParamField path="notifyOnChangeProps" type="Array<keyof UseQueryResult> | 'all'">
+    If set, the component will only re-render when one of the listed properties change
+  </ParamField>
+
+  <ParamField path="meta" type="Record<string, unknown>">
+    Optional metadata that can be used by query client plugins
+  </ParamField>
+
+  <ParamField path="subscribed" type="boolean" default="true">
+    Set this to `false` to unsubscribe this observer from updates to the query cache
+  </ParamField>
+</ParamField>
+
+<ParamField path="queryClient" type="QueryClient">
+  Optional QueryClient instance to use. If not provided, the client from the nearest `QueryClientProvider` will be used.
+</ParamField>
+
+## Returns
+
+<ResponseField name="data" type="TData">
+  The data returned by the query function (or `undefined` if the query hasn't successfully fetched yet)
+</ResponseField>
+
+<ResponseField name="error" type="TError | null">
+  The error object for the query, if an error occurred
+</ResponseField>
+
+<ResponseField name="status" type="'pending' | 'error' | 'success'">
+  The status of the query:
+  - `pending`: The query has no data yet
+  - `error`: The query encountered an error
+  - `success`: The query was successful and data is available
+</ResponseField>
+
+<ResponseField name="fetchStatus" type="'fetching' | 'paused' | 'idle'">
+  The fetch status of the query:
+  - `fetching`: The query is currently fetching
+  - `paused`: The query wanted to fetch, but it is paused
+  - `idle`: The query is not fetching
+</ResponseField>
+
+<ResponseField name="isPending" type="boolean">
+  Derived from `status`. Will be `true` if the query is in `pending` status
+</ResponseField>
+
+<ResponseField name="isSuccess" type="boolean">
+  Derived from `status`. Will be `true` if the query is in `success` status
+</ResponseField>
+
+<ResponseField name="isError" type="boolean">
+  Derived from `status`. Will be `true` if the query is in `error` status
+</ResponseField>
+
+<ResponseField name="isFetching" type="boolean">
+  Derived from `fetchStatus`. Will be `true` whenever the query is fetching (including background refetching)
+</ResponseField>
+
+<ResponseField name="isLoading" type="boolean">
+  Shorthand for `isPending && isFetching` - useful for showing a loading spinner on initial load
+</ResponseField>
+
+<ResponseField name="isLoadingError" type="boolean">
+  Will be `true` if the query failed while fetching for the first time
+</ResponseField>
+
+<ResponseField name="isRefetchError" type="boolean">
+  Will be `true` if the query failed while refetching
+</ResponseField>
+
+<ResponseField name="isStale" type="boolean">
+  Will be `true` if the data in the cache is invalidated or if the data is older than the given `staleTime`
+</ResponseField>
+
+<ResponseField name="isPlaceholderData" type="boolean">
+  Will be `true` if the data shown is placeholder data
+</ResponseField>
+
+<ResponseField name="refetch" type="(options?: { throwOnError?: boolean, cancelRefetch?: boolean }) => Promise<UseQueryResult>">
+  Function to manually refetch the query
+</ResponseField>
+
+<ResponseField name="dataUpdatedAt" type="number">
+  Timestamp of when the data was last updated
+</ResponseField>
+
+<ResponseField name="errorUpdatedAt" type="number">
+  Timestamp of when the error was last updated
+</ResponseField>
+
+<ResponseField name="failureCount" type="number">
+  The failure count for the query
+</ResponseField>
+
+<ResponseField name="failureReason" type="TError | null">
+  The failure reason for the query retry
+</ResponseField>
+
+## Examples
+
+### Basic Usage
+
+```tsx
+import { useQuery } from '@tanstack/react-query'
+
+function TodoList() {
+  const { data, isPending, isError, error } = useQuery({
+    queryKey: ['todos'],
+    queryFn: async () => {
+      const response = await fetch('/api/todos')
+      if (!response.ok) {
+        throw new Error('Network response was not ok')
+      }
+      return response.json()
+    },
+  })
+
+  if (isPending) return <div>Loading...</div>
+  if (isError) return <div>Error: {error.message}</div>
+
+  return (
+    <ul>
+      {data.map((todo) => (
+        <li key={todo.id}>{todo.title}</li>
+      ))}
+    </ul>
+  )
+}
+```
+
+### With Type Safety
+
+```tsx
+interface Todo {
+  id: number
+  title: string
+  completed: boolean
+}
+
+function TodoList() {
+  const { data } = useQuery<Todo[], Error>({
+    queryKey: ['todos'],
+    queryFn: async () => {
+      const response = await fetch('/api/todos')
+      return response.json()
+    },
+  })
+
+  // data is typed as Todo[] | undefined
+}
+```
+
+### With Data Transformation
+
+```tsx
+function TodoList() {
+  const { data } = useQuery({
+    queryKey: ['todos'],
+    queryFn: fetchTodos,
+    select: (data) => data.filter((todo) => !todo.completed),
+  })
+
+  // Only incomplete todos are returned
+}
+```
+
+### Conditional Queries
+
+```tsx
+function User({ userId }: { userId?: string }) {
+  const { data } = useQuery({
+    queryKey: ['user', userId],
+    queryFn: () => fetchUser(userId!),
+    enabled: !!userId, // Only run query if userId is truthy
+  })
+}
+```
+
+### With Stale Time
+
+```tsx
+function TodoList() {
+  const { data } = useQuery({
+    queryKey: ['todos'],
+    queryFn: fetchTodos,
+    staleTime: 1000 * 60 * 5, // Data stays fresh for 5 minutes
+  })
+}
+```
+
+## Source
+
+Implementation: [useQuery.ts:50](~/workspace/source/packages/react-query/src/useQuery.ts)

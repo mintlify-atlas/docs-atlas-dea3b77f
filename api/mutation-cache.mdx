@@ -1,0 +1,396 @@
+---
+title: MutationCache
+description: The MutationCache stores and manages all mutations.
+---
+
+The `MutationCache` is responsible for storing and managing all `Mutation` instances. It's the underlying storage mechanism used by `QueryClient` for mutations.
+
+## Constructor
+
+Creates a new MutationCache instance.
+
+```ts
+const mutationCache = new MutationCache(config?: MutationCacheConfig)
+```
+
+<ParamField path="config" type="MutationCacheConfig" optional>
+  Configuration options for the MutationCache
+  
+  <Expandable title="properties">
+    <ParamField path="onError" type="(error: Error, variables: unknown, onMutateResult: unknown, mutation: Mutation, context: MutationFunctionContext) => void | Promise<unknown>" optional>
+      Global error handler called when any mutation encounters an error.
+    </ParamField>
+    
+    <ParamField path="onSuccess" type="(data: unknown, variables: unknown, onMutateResult: unknown, mutation: Mutation, context: MutationFunctionContext) => void | Promise<unknown>" optional>
+      Global success handler called when any mutation succeeds.
+    </ParamField>
+    
+    <ParamField path="onMutate" type="(variables: unknown, mutation: Mutation, context: MutationFunctionContext) => void | Promise<unknown>" optional>
+      Global handler called before any mutation executes.
+    </ParamField>
+    
+    <ParamField path="onSettled" type="(data: unknown | undefined, error: Error | null, variables: unknown, onMutateResult: unknown, mutation: Mutation, context: MutationFunctionContext) => void | Promise<unknown>" optional>
+      Global settled handler called when any mutation completes (success or error).
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+### Example
+
+```ts
+import { MutationCache } from '@tanstack/query-core'
+
+const mutationCache = new MutationCache({
+  onError: (error, variables, onMutateResult, mutation) => {
+    console.error('Mutation failed:', error)
+  },
+  onSuccess: (data, variables, onMutateResult, mutation) => {
+    console.log('Mutation succeeded:', data)
+  },
+})
+```
+
+## Methods
+
+### build
+
+Builds a new mutation instance.
+
+```ts
+build<TData, TError, TVariables, TOnMutateResult>(
+  client: QueryClient,
+  options: MutationOptions<TData, TError, TVariables, TOnMutateResult>,
+  state?: MutationState<TData, TError, TVariables, TOnMutateResult>
+): Mutation<TData, TError, TVariables, TOnMutateResult>
+```
+
+<ParamField path="client" type="QueryClient" required>
+  The QueryClient instance.
+</ParamField>
+
+<ParamField path="options" type="MutationOptions" required>
+  Options for the mutation.
+</ParamField>
+
+<ParamField path="state" type="MutationState" optional>
+  Optional initial state for the mutation.
+</ParamField>
+
+<ResponseField name="Mutation" type="Mutation">
+  Returns a new Mutation instance.
+</ResponseField>
+
+### add
+
+Adds a mutation to the cache.
+
+```ts
+add(mutation: Mutation): void
+```
+
+<ParamField path="mutation" type="Mutation" required>
+  The mutation instance to add.
+</ParamField>
+
+### remove
+
+Removes a mutation from the cache.
+
+```ts
+remove(mutation: Mutation): void
+```
+
+<ParamField path="mutation" type="Mutation" required>
+  The mutation instance to remove.
+</ParamField>
+
+### clear
+
+Clears all mutations from the cache.
+
+```ts
+clear(): void
+```
+
+#### Example
+
+```ts
+mutationCache.clear()
+```
+
+### getAll
+
+Returns all mutations in the cache.
+
+```ts
+getAll(): Array<Mutation>
+```
+
+<ResponseField name="Array<Mutation>" type="Array">
+  Returns an array of all Mutation instances in the cache.
+</ResponseField>
+
+### find
+
+Finds a single mutation matching the provided filters.
+
+```ts
+find<TData, TError, TVariables, TOnMutateResult>(
+  filters: MutationFilters
+): Mutation<TData, TError, TVariables, TOnMutateResult> | undefined
+```
+
+<ParamField path="filters" type="MutationFilters" required>
+  Filters to match mutations.
+  
+  <Expandable title="properties">
+    <ParamField path="mutationKey" type="MutationKey" optional>
+      Mutation key to match.
+    </ParamField>
+    
+    <ParamField path="exact" type="boolean" optional>
+      Whether to match the mutation key exactly. Default is true.
+    </ParamField>
+    
+    <ParamField path="status" type="'idle' | 'pending' | 'error' | 'success'" optional>
+      Filter by mutation status.
+    </ParamField>
+    
+    <ParamField path="predicate" type="(mutation: Mutation) => boolean" optional>
+      Custom predicate function.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ResponseField name="Mutation | undefined" type="Mutation">
+  Returns the first matching Mutation instance, or undefined if not found.
+</ResponseField>
+
+### findAll
+
+Finds all mutations matching the provided filters.
+
+```ts
+findAll(filters?: MutationFilters): Array<Mutation>
+```
+
+<ParamField path="filters" type="MutationFilters" optional>
+  Filters to match mutations. If not provided, returns all mutations.
+</ParamField>
+
+<ResponseField name="Array<Mutation>" type="Array">
+  Returns an array of all matching Mutation instances.
+</ResponseField>
+
+#### Example
+
+```ts
+// Find all pending mutations
+const pendingMutations = mutationCache.findAll({ status: 'pending' })
+
+// Find mutations with a specific key
+const todoMutations = mutationCache.findAll({ 
+  mutationKey: ['todos'] 
+})
+
+// Find mutations with custom predicate
+const mutations = mutationCache.findAll({
+  predicate: (mutation) => mutation.state.isPaused
+})
+```
+
+### notify
+
+Notifies all cache listeners of an event.
+
+```ts
+notify(event: MutationCacheNotifyEvent): void
+```
+
+<ParamField path="event" type="MutationCacheNotifyEvent" required>
+  The event to notify listeners about.
+</ParamField>
+
+### subscribe
+
+Subscribes to cache events.
+
+```ts
+subscribe(listener: MutationCacheListener): () => void
+```
+
+<ParamField path="listener" type="(event: MutationCacheNotifyEvent) => void" required>
+  Function called when cache events occur.
+</ParamField>
+
+<ResponseField name="() => void" type="function">
+  Returns an unsubscribe function.
+</ResponseField>
+
+#### Example
+
+```ts
+const unsubscribe = mutationCache.subscribe((event) => {
+  console.log('Mutation cache event:', event.type)
+  
+  if (event.type === 'added') {
+    console.log('Mutation added:', event.mutation.mutationId)
+  } else if (event.type === 'updated') {
+    console.log('Mutation updated:', event.mutation.state.status)
+  }
+})
+
+// Later, unsubscribe
+unsubscribe()
+```
+
+### resumePausedMutations
+
+Resumes all paused mutations.
+
+```ts
+resumePausedMutations(): Promise<unknown>
+```
+
+<ResponseField name="Promise<unknown>" type="Promise">
+  Returns a promise that resolves when all paused mutations have been resumed.
+</ResponseField>
+
+#### Example
+
+```ts
+await mutationCache.resumePausedMutations()
+```
+
+## Events
+
+The MutationCache emits the following events:
+
+### added
+
+Fired when a mutation is added to the cache.
+
+```ts
+{
+  type: 'added'
+  mutation: Mutation
+}
+```
+
+### removed
+
+Fired when a mutation is removed from the cache.
+
+```ts
+{
+  type: 'removed'
+  mutation: Mutation
+}
+```
+
+### updated
+
+Fired when a mutation is updated.
+
+```ts
+{
+  type: 'updated'
+  mutation: Mutation
+  action: Action
+}
+```
+
+### observerAdded
+
+Fired when an observer is added to a mutation.
+
+```ts
+{
+  type: 'observerAdded'
+  mutation: Mutation
+  observer: MutationObserver
+}
+```
+
+### observerRemoved
+
+Fired when an observer is removed from a mutation.
+
+```ts
+{
+  type: 'observerRemoved'
+  mutation: Mutation
+  observer: MutationObserver
+}
+```
+
+### observerOptionsUpdated
+
+Fired when observer options are updated.
+
+```ts
+{
+  type: 'observerOptionsUpdated'
+  mutation?: Mutation
+  observer: MutationObserver
+}
+```
+
+## Mutation Scopes
+
+The MutationCache supports mutation scoping, which allows you to control the order of mutation execution. Mutations with the same scope ID will execute sequentially.
+
+### canRun
+
+Checks if a mutation can run based on its scope.
+
+```ts
+canRun(mutation: Mutation): boolean
+```
+
+<ParamField path="mutation" type="Mutation" required>
+  The mutation to check.
+</ParamField>
+
+<ResponseField name="boolean" type="boolean">
+  Returns true if the mutation can run, false if it must wait for another mutation in the same scope.
+</ResponseField>
+
+### runNext
+
+Runs the next pending mutation in the same scope.
+
+```ts
+runNext(mutation: Mutation): Promise<unknown>
+```
+
+<ParamField path="mutation" type="Mutation" required>
+  The mutation that just completed.
+</ParamField>
+
+<ResponseField name="Promise<unknown>" type="Promise">
+  Returns a promise that resolves when the next mutation continues.
+</ResponseField>
+
+## Usage with QueryClient
+
+While you can use MutationCache directly, it's typically used through a QueryClient:
+
+```ts
+import { QueryClient, MutationCache } from '@tanstack/query-core'
+
+// Custom cache with event handlers
+const mutationCache = new MutationCache({
+  onSuccess: (data) => {
+    console.log('Global mutation success:', data)
+  },
+  onError: (error) => {
+    console.error('Global mutation error:', error)
+  },
+})
+
+// Use custom cache with QueryClient
+const queryClient = new QueryClient({
+  mutationCache,
+})
+```

@@ -1,0 +1,525 @@
+---
+title: Query Invalidation
+description: Understanding when and how to invalidate queries in TanStack Query
+---
+
+Query invalidation is the process of marking queries as stale to trigger refetches. It's essential for keeping your UI in sync with server state after mutations.
+
+## What is Invalidation?
+
+When you invalidate a query:
+
+1. The query is marked as stale (regardless of its `staleTime`)
+2. If the query is currently being rendered, it refetches in the background
+
+From `query.ts:380-384`:
+
+```typescript
+invalidate(): void {
+  if (!this.state.isInvalidated) {
+    this.#dispatch({ type: 'invalidate' })
+  }
+}
+```
+
+And the invalidation is handled in the reducer at `query.ts:665-669`:
+
+```typescript
+case 'invalidate':
+  return {
+    ...state,
+    isInvalidated: true,
+  }
+```
+
+## Basic Invalidation
+
+### Invalidate Specific Queries
+
+```tsx
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+
+function CreatePost() {
+  const queryClient = useQueryClient()
+  
+  const mutation = useMutation({
+    mutationFn: createPost,
+    onSuccess: () => {
+      // Invalidate and refetch posts
+      queryClient.invalidateQueries({ queryKey: ['posts'] })
+    },
+  })
+  
+  return <button onClick={() => mutation.mutate(newPost)}>Create</button>
+}
+```
+
+### Invalidate Multiple Queries
+
+```tsx
+// Invalidate all queries starting with 'posts'
+queryClient.invalidateQueries({ queryKey: ['posts'] })
+
+// This invalidates:
+// ['posts']
+// ['posts', 'list']
+// ['posts', 'detail', 123]
+// ['posts', { status: 'published' }]
+```
+
+## Invalidation API
+
+From `queryClient.ts:293-313`, the `invalidateQueries` method:
+
+```typescript
+invalidateQueries<TTaggedQueryKey extends QueryKey = QueryKey>(
+  filters?: InvalidateQueryFilters<TTaggedQueryKey>,
+  options: InvalidateOptions = {},
+): Promise<void> {
+  return notifyManager.batch(() => {
+    this.#queryCache.findAll(filters).forEach((query) => {
+      query.invalidate()
+    })
+
+    if (filters?.refetchType === 'none') {
+      return Promise.resolve()
+    }
+    return this.refetchQueries(
+      {
+        ...filters,
+        type: filters?.refetchType ?? filters?.type ?? 'active',
+      },
+      options,
+    )
+  })
+}
+```
+
+### Refetch Type
+
+Control which queries are refetched after invalidation:
+
+```tsx
+// Only refetch active queries (currently mounted)
+queryClient.invalidateQueries({ 
+  queryKey: ['posts'],
+  refetchType: 'active' // default
+})
+
+// Refetch all queries, even inactive ones
+queryClient.invalidateQueries({ 
+  queryKey: ['posts'],
+  refetchType: 'all'
+})
+
+// Don't refetch, just mark as stale
+queryClient.invalidateQueries({ 
+  queryKey: ['posts'],
+  refetchType: 'none'
+})
+```
+
+<Note>
+**Active queries** are queries currently being observed (rendered in components). **Inactive queries** are in the cache but not currently observed.
+</Note>
+
+## Query Filters
+
+### Exact Matching
+
+```tsx
+// Only invalidate queries with exactly ['posts', 'list']
+queryClient.invalidateQueries({ 
+  queryKey: ['posts', 'list'],
+  exact: true 
+})
+```
+
+### Prefix Matching (Default)
+
+```tsx
+// Invalidate all queries starting with ['posts']
+queryClient.invalidateQueries({ queryKey: ['posts'] })
+
+// Invalidates:
+// ['posts'] ✓
+// ['posts', 'list'] ✓
+// ['posts', 123] ✓
+// ['users'] ✗
+```
+
+### Predicate Function
+
+```tsx
+// Invalidate queries matching a custom condition
+queryClient.invalidateQueries({
+  predicate: (query) => {
+    return query.queryKey[0] === 'posts' && 
+           query.state.data?.some((post) => post.authorId === authorId)
+  },
+})
+```
+
+### Filter by Status
+
+```tsx
+// Only invalidate stale queries
+queryClient.invalidateQueries({
+  queryKey: ['posts'],
+  stale: true,
+})
+
+// Only invalidate inactive queries
+queryClient.invalidateQueries({
+  queryKey: ['posts'],
+  type: 'inactive',
+})
+```
+
+## Common Invalidation Patterns
+
+### After Mutations
+
+The most common use case - invalidate after creating, updating, or deleting data:
+
+```tsx
+const createPostMutation = useMutation({
+  mutationFn: createPost,
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ['posts'] })
+  },
+})
+
+const updatePostMutation = useMutation({
+  mutationFn: updatePost,
+  onSuccess: (data) => {
+    // Invalidate list and detail
+    queryClient.invalidateQueries({ queryKey: ['posts'] })
+    queryClient.invalidateQueries({ queryKey: ['posts', data.id] })
+  },
+})
+
+const deletePostMutation = useMutation({
+  mutationFn: deletePost,
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ['posts'] })
+  },
+})
+```
+
+### Hierarchical Invalidation
+
+```tsx
+const postKeys = {
+  all: ['posts'] as const,
+  lists: () => [...postKeys.all, 'list'] as const,
+  list: (filters: Filters) => [...postKeys.lists(), filters] as const,
+  details: () => [...postKeys.all, 'detail'] as const,
+  detail: (id: number) => [...postKeys.details(), id] as const,
+}
+
+// Invalidate everything
+queryClient.invalidateQueries({ queryKey: postKeys.all })
+
+// Invalidate all lists
+queryClient.invalidateQueries({ queryKey: postKeys.lists() })
+
+// Invalidate specific detail
+queryClient.invalidateQueries({ queryKey: postKeys.detail(123) })
+```
+
+### Related Queries
+
+```tsx
+const updateUserMutation = useMutation({
+  mutationFn: updateUser,
+  onSuccess: (data) => {
+    // Invalidate user and all related queries
+    queryClient.invalidateQueries({ queryKey: ['users', data.id] })
+    queryClient.invalidateQueries({ queryKey: ['posts', { authorId: data.id }] })
+    queryClient.invalidateQueries({ queryKey: ['comments', { authorId: data.id }] })
+  },
+})
+```
+
+## Invalidation vs. Refetch
+
+### invalidateQueries
+
+Marks queries as stale and refetches **active** queries by default:
+
+```tsx
+queryClient.invalidateQueries({ queryKey: ['posts'] })
+```
+
+- Marks queries as stale immediately
+- Refetches active queries automatically
+- Inactive queries refetch when they become active
+
+### refetchQueries
+
+Forces an immediate refetch without marking as stale:
+
+```tsx
+queryClient.refetchQueries({ queryKey: ['posts'] })
+```
+
+From `queryClient.ts:315-339`:
+
+```typescript
+refetchQueries<TTaggedQueryKey extends QueryKey = QueryKey>(
+  filters?: RefetchQueryFilters<TTaggedQueryKey>,
+  options: RefetchOptions = {},
+): Promise<void> {
+  const fetchOptions = {
+    ...options,
+    cancelRefetch: options.cancelRefetch ?? true,
+  }
+  const promises = notifyManager.batch(() =>
+    this.#queryCache
+      .findAll(filters)
+      .filter((query) => !query.isDisabled() && !query.isStatic())
+      .map((query) => {
+        let promise = query.fetch(undefined, fetchOptions)
+        if (!fetchOptions.throwOnError) {
+          promise = promise.catch(noop)
+        }
+        return query.state.fetchStatus === 'paused'
+          ? Promise.resolve()
+          : promise
+      }),
+  )
+
+  return Promise.all(promises).then(noop)
+}
+```
+
+<Tip>
+Use `invalidateQueries` for most cases. Use `refetchQueries` when you need to force an immediate refetch regardless of staleness.
+</Tip>
+
+## Reset Queries
+
+Reset queries to their initial state:
+
+```tsx
+queryClient.resetQueries({ queryKey: ['posts'] })
+```
+
+From `queryClient.ts:258-276`:
+
+```typescript
+resetQueries<TTaggedQueryKey extends QueryKey = QueryKey>(
+  filters?: QueryFilters<TTaggedQueryKey>,
+  options?: ResetOptions,
+): Promise<void> {
+  const queryCache = this.#queryCache
+
+  return notifyManager.batch(() => {
+    queryCache.findAll(filters).forEach((query) => {
+      query.reset()
+    })
+    return this.refetchQueries(
+      {
+        type: 'active',
+        ...filters,
+      },
+      options,
+    )
+  })
+}
+```
+
+This:
+1. Resets the query state to initial
+2. Refetches active queries
+
+## Automatic Invalidation
+
+### Window Focus
+
+Queries automatically refetch when the window regains focus (if stale):
+
+```tsx
+useQuery({
+  queryKey: ['posts'],
+  queryFn: fetchPosts,
+  refetchOnWindowFocus: true, // default
+})
+```
+
+### Network Reconnection
+
+Queries refetch when the network reconnects (if stale):
+
+```tsx
+useQuery({
+  queryKey: ['posts'],
+  queryFn: fetchPosts,
+  refetchOnReconnect: true, // default
+})
+```
+
+### Mount
+
+Queries refetch when new instances mount (if stale):
+
+```tsx
+useQuery({
+  queryKey: ['posts'],
+  queryFn: fetchPosts,
+  refetchOnMount: true, // default
+})
+```
+
+## Manual Invalidation Strategy
+
+### Conservative Approach
+
+Invalidate only what changed:
+
+```tsx
+const updatePostMutation = useMutation({
+  mutationFn: updatePost,
+  onSuccess: (updatedPost) => {
+    // Only invalidate the specific post and lists
+    queryClient.invalidateQueries({ queryKey: ['posts', 'list'] })
+    queryClient.invalidateQueries({ queryKey: ['posts', updatedPost.id] })
+  },
+})
+```
+
+### Aggressive Approach
+
+Invalidate everything related:
+
+```tsx
+const updatePostMutation = useMutation({
+  mutationFn: updatePost,
+  onSuccess: () => {
+    // Invalidate all post-related queries
+    queryClient.invalidateQueries({ queryKey: ['posts'] })
+  },
+})
+```
+
+### Hybrid Approach
+
+Optimistic update + invalidation:
+
+```tsx
+const updatePostMutation = useMutation({
+  mutationFn: updatePost,
+  onMutate: async (updatedPost) => {
+    // Cancel outgoing refetches
+    await queryClient.cancelQueries({ queryKey: ['posts', updatedPost.id] })
+    
+    // Optimistically update
+    const previous = queryClient.getQueryData(['posts', updatedPost.id])
+    queryClient.setQueryData(['posts', updatedPost.id], updatedPost)
+    
+    return { previous }
+  },
+  onError: (err, updatedPost, context) => {
+    // Rollback
+    queryClient.setQueryData(['posts', updatedPost.id], context?.previous)
+  },
+  onSettled: (updatedPost) => {
+    // Always refetch to ensure sync
+    queryClient.invalidateQueries({ queryKey: ['posts', updatedPost.id] })
+    queryClient.invalidateQueries({ queryKey: ['posts', 'list'] })
+  },
+})
+```
+
+## Cancelling Queries
+
+Cancel in-flight queries before invalidating:
+
+```tsx
+// Cancel all posts queries before invalidating
+await queryClient.cancelQueries({ queryKey: ['posts'] })
+queryClient.invalidateQueries({ queryKey: ['posts'] })
+```
+
+This is useful for optimistic updates to prevent race conditions.
+
+## Invalidation Options
+
+```tsx
+queryClient.invalidateQueries(
+  { queryKey: ['posts'] },
+  {
+    cancelRefetch: true, // Cancel current refetch if running
+    throwOnError: false, // Don't throw on error
+  }
+)
+```
+
+## Best Practices
+
+### 1. Use Query Key Factories
+
+```tsx
+const keys = {
+  posts: {
+    all: ['posts'] as const,
+    lists: () => [...keys.posts.all, 'list'] as const,
+    list: (filters: Filters) => [...keys.posts.lists(), filters] as const,
+    details: () => [...keys.posts.all, 'detail'] as const,
+    detail: (id: number) => [...keys.posts.details(), id] as const,
+  },
+}
+
+// Easy to invalidate at any level
+queryClient.invalidateQueries({ queryKey: keys.posts.all })
+queryClient.invalidateQueries({ queryKey: keys.posts.lists() })
+queryClient.invalidateQueries({ queryKey: keys.posts.detail(123) })
+```
+
+### 2. Invalidate in onSettled
+
+Use `onSettled` to invalidate whether the mutation succeeds or fails:
+
+```tsx
+useMutation({
+  mutationFn: updatePost,
+  onSettled: () => {
+    queryClient.invalidateQueries({ queryKey: ['posts'] })
+  },
+})
+```
+
+### 3. Be Specific When Possible
+
+```tsx
+// Good: specific invalidation
+queryClient.invalidateQueries({ queryKey: ['posts', postId] })
+
+// Less ideal: broad invalidation (but sometimes necessary)
+queryClient.invalidateQueries({ queryKey: ['posts'] })
+```
+
+### 4. Combine with Optimistic Updates
+
+```tsx
+useMutation({
+  mutationFn: updatePost,
+  onMutate: async (updated) => {
+    await queryClient.cancelQueries({ queryKey: ['posts', updated.id] })
+    const previous = queryClient.getQueryData(['posts', updated.id])
+    queryClient.setQueryData(['posts', updated.id], updated)
+    return { previous }
+  },
+  onError: (err, updated, context) => {
+    queryClient.setQueryData(['posts', updated.id], context?.previous)
+  },
+  onSettled: (updated) => {
+    queryClient.invalidateQueries({ queryKey: ['posts', updated?.id] })
+  },
+})
+```
+
+<Warning>
+Always await `cancelQueries` before performing optimistic updates to prevent race conditions between your optimistic update and in-flight requests.
+</Warning>

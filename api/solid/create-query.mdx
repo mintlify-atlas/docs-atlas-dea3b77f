@@ -1,0 +1,399 @@
+---
+title: createQuery
+description: Solid primitive for fetching and caching data
+---
+
+Fetch and cache data with the `createQuery` primitive. It returns a reactive query result that automatically updates when dependencies change in SolidJS.
+
+## Signature
+
+```ts
+function createQuery<TQueryFnData, TError, TData, TQueryKey>(
+  options: Accessor<CreateQueryOptions<TQueryFnData, TError, TData, TQueryKey>>,
+  queryClient?: Accessor<QueryClient>,
+): CreateQueryResult<TData, TError>
+```
+
+## Parameters
+
+<ParamField path="options" type="Accessor<CreateQueryOptions<TQueryFnData, TError, TData, TQueryKey>>" required>
+  A Solid accessor (function) returning query configuration options.
+  
+  <Expandable title="properties">
+    <ParamField path="queryKey" type="QueryKey" required>
+      Unique identifier for the query. When used in an accessor, changes trigger refetch.
+    </ParamField>
+    
+    <ParamField path="queryFn" type="QueryFunction<TQueryFnData, TQueryKey>" required>
+      Function that fetches the data.
+    </ParamField>
+    
+    <ParamField path="enabled" type="boolean">
+      Set to `false` to disable automatic query execution.
+    </ParamField>
+    
+    <ParamField path="staleTime" type="number">
+      Time in milliseconds until cached data is considered stale.
+    </ParamField>
+    
+    <ParamField path="gcTime" type="number">
+      Time in milliseconds before unused data is garbage collected.
+    </ParamField>
+    
+    <ParamField path="refetchInterval" type="number | false">
+      Interval in milliseconds for automatic refetching.
+    </ParamField>
+    
+    <ParamField path="refetchOnWindowFocus" type="boolean">
+      Refetch when window regains focus.
+    </ParamField>
+    
+    <ParamField path="refetchOnReconnect" type="boolean">
+      Refetch when network reconnects.
+    </ParamField>
+    
+    <ParamField path="retry" type="number | boolean">
+      Number of retry attempts or boolean to enable/disable retries.
+    </ParamField>
+    
+    <ParamField path="select" type="(data: TQueryData) => TData">
+      Transform or select a part of the data.
+    </ParamField>
+    
+    <ParamField path="initialData" type="TData | () => TData">
+      Initial data to use before the query executes.
+    </ParamField>
+    
+    <ParamField path="placeholderData" type="TData | () => TData">
+      Placeholder data while the query is loading.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="queryClient" type="Accessor<QueryClient>">
+  Accessor returning a custom QueryClient instance. If not provided, uses the client from context.
+</ParamField>
+
+## Returns
+
+<ResponseField name="CreateQueryResult<TData, TError>" type="object">
+  Reactive query state that updates automatically.
+  
+  <Expandable title="properties">
+    <ResponseField name="data" type="TData | undefined">
+      The query result data. Returns `undefined` if not yet loaded.
+    </ResponseField>
+    
+    <ResponseField name="error" type="TError | null">
+      The error object if the query failed.
+    </ResponseField>
+    
+    <ResponseField name="isLoading" type="boolean">
+      `true` when fetching for the first time (no cached data).
+    </ResponseField>
+    
+    <ResponseField name="isFetching" type="boolean">
+      `true` whenever the query is fetching (including background refetches).
+    </ResponseField>
+    
+    <ResponseField name="isSuccess" type="boolean">
+      `true` when the query has successfully fetched data.
+    </ResponseField>
+    
+    <ResponseField name="isError" type="boolean">
+      `true` when the query encountered an error.
+    </ResponseField>
+    
+    <ResponseField name="isPending" type="boolean">
+      `true` when the query is pending (no data and no error yet).
+    </ResponseField>
+    
+    <ResponseField name="status" type="'pending' | 'error' | 'success'">
+      The current status of the query.
+    </ResponseField>
+    
+    <ResponseField name="fetchStatus" type="'fetching' | 'paused' | 'idle'">
+      The fetch status of the query.
+    </ResponseField>
+    
+    <ResponseField name="refetch" type="() => Promise<QueryObserverResult>">
+      Manually trigger a refetch of the query.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Type Parameters
+
+- `TQueryFnData` - Type returned by the query function
+- `TError` - Type of error (defaults to `DefaultError`)
+- `TData` - Type of `data` returned (defaults to `TQueryFnData`)
+- `TQueryKey` - Type of the query key (defaults to `QueryKey`)
+
+## Examples
+
+### Basic Usage
+
+```tsx
+import { createQuery } from '@tanstack/solid-query'
+import { For, Show } from 'solid-js'
+
+function TodoList() {
+  const query = createQuery(() => ({
+    queryKey: ['todos'],
+    queryFn: async () => {
+      const res = await fetch('/api/todos')
+      return res.json()
+    },
+  }))
+
+  return (
+    <div>
+      <Show when={query.isLoading}>
+        <div>Loading...</div>
+      </Show>
+      
+      <Show when={query.error}>
+        <div>Error: {query.error.message}</div>
+      </Show>
+      
+      <Show when={query.data}>
+        <ul>
+          <For each={query.data}>
+            {(todo) => <li>{todo.title}</li>}
+          </For>
+        </ul>
+      </Show>
+    </div>
+  )
+}
+```
+
+### Reactive Query Keys
+
+```tsx
+import { createSignal } from 'solid-js'
+import { createQuery } from '@tanstack/solid-query'
+
+function TodoDetail() {
+  const [todoId, setTodoId] = createSignal(1)
+
+  // Query automatically refetches when todoId changes
+  const query = createQuery(() => ({
+    queryKey: ['todo', todoId()],
+    queryFn: async () => {
+      const res = await fetch(`/api/todos/${todoId()}`)
+      return res.json()
+    },
+  }))
+
+  return (
+    <div>
+      <button onClick={() => setTodoId(id => id + 1)}>
+        Next Todo
+      </button>
+      <Show when={query.data}>
+        <h2>{query.data.title}</h2>
+      </Show>
+    </div>
+  )
+}
+```
+
+### With TypeScript
+
+```tsx
+import { createQuery } from '@tanstack/solid-query'
+
+interface Todo {
+  id: number
+  title: string
+  completed: boolean
+}
+
+function TodoList() {
+  const query = createQuery(() => ({
+    queryKey: ['todos'],
+    queryFn: async (): Promise<Todo[]> => {
+      const res = await fetch('/api/todos')
+      return res.json()
+    },
+  }))
+
+  // query.data is typed as Todo[] | undefined
+
+  return <div>{/* ... */}</div>
+}
+```
+
+### Conditional Fetching
+
+```tsx
+import { createSignal } from 'solid-js'
+import { createQuery } from '@tanstack/solid-query'
+
+function UserProfile() {
+  const [userId, setUserId] = createSignal<number | null>(null)
+
+  const query = createQuery(() => ({
+    queryKey: ['user', userId()],
+    queryFn: () => fetchUser(userId()!),
+    enabled: userId() !== null, // Only fetch when userId is set
+  }))
+
+  return <div>{/* ... */}</div>
+}
+```
+
+### With Select
+
+```tsx
+import { createQuery } from '@tanstack/solid-query'
+
+function IncompleteTodos() {
+  const query = createQuery(() => ({
+    queryKey: ['todos'],
+    queryFn: fetchTodos,
+    select: (todos) => todos.filter(todo => !todo.completed),
+  }))
+
+  // query.data only contains incomplete todos
+
+  return <div>{/* ... */}</div>
+}
+```
+
+### Dependent Queries
+
+```tsx
+import { createQuery } from '@tanstack/solid-query'
+
+function UserProjects() {
+  // First query
+  const userQuery = createQuery(() => ({
+    queryKey: ['user'],
+    queryFn: fetchUser,
+  }))
+
+  // Second query depends on first
+  const projectsQuery = createQuery(() => ({
+    queryKey: ['projects', userQuery.data?.id],
+    queryFn: () => fetchProjects(userQuery.data!.id),
+    enabled: !!userQuery.data?.id,
+  }))
+
+  return <div>{/* ... */}</div>
+}
+```
+
+### Initial Data
+
+```tsx
+import { createQuery } from '@tanstack/solid-query'
+
+function TodoDetail(props: { todoId: number; initialTodo?: Todo }) {
+  const query = createQuery(() => ({
+    queryKey: ['todo', props.todoId],
+    queryFn: () => fetchTodo(props.todoId),
+    initialData: props.initialTodo,
+  }))
+
+  // query.data starts with initialTodo if provided
+
+  return <div>{/* ... */}</div>
+}
+```
+
+### Polling/Refetch Interval
+
+```tsx
+import { createQuery } from '@tanstack/solid-query'
+
+function RealtimeData() {
+  const query = createQuery(() => ({
+    queryKey: ['realtime-data'],
+    queryFn: fetchRealtimeData,
+    refetchInterval: 5000, // Refetch every 5 seconds
+  }))
+
+  return <div>{/* ... */}</div>
+}
+```
+
+### Manual Refetch
+
+```tsx
+import { createQuery } from '@tanstack/solid-query'
+
+function ManualRefetch() {
+  const query = createQuery(() => ({
+    queryKey: ['data'],
+    queryFn: fetchData,
+  }))
+
+  return (
+    <div>
+      <button onClick={() => query.refetch()}>
+        Refresh Data
+      </button>
+      <Show when={query.data}>
+        <pre>{JSON.stringify(query.data, null, 2)}</pre>
+      </Show>
+    </div>
+  )
+}
+```
+
+### Error Handling
+
+```tsx
+import { createQuery } from '@tanstack/solid-query'
+import { Show } from 'solid-js'
+
+function ErrorHandling() {
+  const query = createQuery(() => ({
+    queryKey: ['data'],
+    queryFn: fetchData,
+    retry: 3,
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+  }))
+
+  return (
+    <Show 
+      when={!query.isError}
+      fallback={
+        <div>
+          <p>Error: {query.error?.message}</p>
+          <button onClick={() => query.refetch()}>Try Again</button>
+        </div>
+      }
+    >
+      {/* Success content */}
+    </Show>
+  )
+}
+```
+
+## Notes
+
+<Note>
+The options parameter must be an accessor (function). This allows SolidJS to track dependencies and automatically refetch when reactive values change.
+</Note>
+
+<Tip>
+Use `createMemo` if you need to derive query options from multiple signals:
+
+```tsx
+const queryOptions = createMemo(() => ({
+  queryKey: ['data', filter(), page()],
+  queryFn: () => fetchData(filter(), page()),
+}))
+
+const query = createQuery(queryOptions)
+```
+</Tip>
+
+## Related
+
+- [createInfiniteQuery](/api/solid/create-infinite-query) - For paginated/infinite data
+- [createMutation](/api/solid/create-mutation) - For mutations/side effects
+- [Solid Guide](/frameworks/solid) - Complete guide to Solid Query

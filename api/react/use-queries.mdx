@@ -1,0 +1,349 @@
+---
+title: useQueries
+description: React hook for fetching multiple queries in parallel
+---
+
+# useQueries
+
+The `useQueries` hook allows you to fetch multiple queries in parallel. It accepts an array of query options objects and returns an array of query results.
+
+## Import
+
+```tsx
+import { useQueries } from '@tanstack/react-query'
+```
+
+## Signature
+
+```tsx
+function useQueries<T extends Array<any>, TCombinedResult = QueriesResults<T>>({
+  queries,
+  combine,
+  subscribed,
+}: {
+  queries: readonly [...QueriesOptions<T>]
+  combine?: (result: QueriesResults<T>) => TCombinedResult
+  subscribed?: boolean
+}, queryClient?: QueryClient): TCombinedResult
+```
+
+## Type Parameters
+
+<ParamField path="T" type="type">
+  Array type containing the configuration for each query
+</ParamField>
+
+<ParamField path="TCombinedResult" type="type" default="QueriesResults<T>">
+  The type of the combined result after the `combine` function is applied
+</ParamField>
+
+## Parameters
+
+<ParamField path="options" type="object" required>
+  <ParamField path="queries" type="readonly [...QueriesOptions<T>]" required>
+    An array of query option objects. Each query option object accepts most `useQuery` options except:
+    - `placeholderData` cannot be a function
+    - `subscribed` is not available per query (use the top-level `subscribed` instead)
+
+    Each query can have:
+    - `queryKey` (required): Unique key for the query
+    - `queryFn`: Function that fetches the data
+    - `enabled`: Whether the query should run
+    - `staleTime`: Time in ms after data is considered stale
+    - `gcTime`: Time in ms for garbage collection
+    - `select`: Transform function for the data
+    - All other standard `useQuery` options
+  </ParamField>
+
+  <ParamField path="combine" type="(result: QueriesResults<T>) => TCombinedResult">
+    Optional function to combine or transform the array of query results into a different shape
+  </ParamField>
+
+  <ParamField path="subscribed" type="boolean" default="true">
+    Set this to `false` to unsubscribe all queries from updates to the query cache
+  </ParamField>
+</ParamField>
+
+<ParamField path="queryClient" type="QueryClient">
+  Optional QueryClient instance to use. If not provided, the client from the nearest `QueryClientProvider` will be used.
+</ParamField>
+
+## Returns
+
+Returns an array of query results, where each result has the same shape as the result from `useQuery`:
+
+```tsx
+Array<{
+  data: TData
+  error: TError | null
+  status: 'pending' | 'error' | 'success'
+  fetchStatus: 'fetching' | 'paused' | 'idle'
+  isPending: boolean
+  isSuccess: boolean
+  isError: boolean
+  isFetching: boolean
+  // ... all other useQuery result properties
+}>
+```
+
+If a `combine` function is provided, returns the result of that function instead.
+
+## Type Inference
+
+The `useQueries` hook provides excellent type inference:
+
+```tsx
+// Explicit type parameters
+const results = useQueries({
+  queries: [
+    { queryKey: ['user'], queryFn: fetchUser },
+    { queryKey: ['posts'], queryFn: fetchPosts },
+  ]
+})
+// results[0].data is inferred from fetchUser return type
+// results[1].data is inferred from fetchPosts return type
+
+// Using type hints for better inference
+const results = useQueries({
+  queries: [
+    {
+      queryKey: ['user'],
+      queryFn: fetchUser,
+    } as const,
+    {
+      queryKey: ['posts'],
+      queryFn: fetchPosts,
+    } as const,
+  ]
+})
+```
+
+## Examples
+
+### Basic Usage
+
+```tsx
+import { useQueries } from '@tanstack/react-query'
+
+function UserData({ userIds }: { userIds: number[] }) {
+  const results = useQueries({
+    queries: userIds.map((id) => ({
+      queryKey: ['user', id],
+      queryFn: async () => {
+        const response = await fetch(`/api/users/${id}`)
+        return response.json()
+      },
+      staleTime: 1000 * 60 * 5,
+    })),
+  })
+
+  const isLoading = results.some((result) => result.isPending)
+  const isError = results.some((result) => result.isError)
+
+  if (isLoading) return <div>Loading...</div>
+  if (isError) return <div>Error loading users</div>
+
+  return (
+    <div>
+      {results.map((result, i) => (
+        <div key={userIds[i]}>
+          {result.data?.name}
+        </div>
+      ))}
+    </div>
+  )
+}
+```
+
+### With Type Safety
+
+```tsx
+interface User {
+  id: number
+  name: string
+}
+
+interface Post {
+  id: number
+  title: string
+}
+
+function Dashboard() {
+  const [userQuery, postsQuery] = useQueries({
+    queries: [
+      {
+        queryKey: ['user'],
+        queryFn: async (): Promise<User> => {
+          const response = await fetch('/api/user')
+          return response.json()
+        },
+      },
+      {
+        queryKey: ['posts'],
+        queryFn: async (): Promise<Post[]> => {
+          const response = await fetch('/api/posts')
+          return response.json()
+        },
+      },
+    ],
+  })
+
+  // userQuery.data is typed as User | undefined
+  // postsQuery.data is typed as Post[] | undefined
+}
+```
+
+### Dynamic Queries
+
+```tsx
+function UserPosts({ userId, postIds }: { userId: number; postIds: number[] }) {
+  const queries = useQueries({
+    queries: [
+      {
+        queryKey: ['user', userId],
+        queryFn: () => fetchUser(userId),
+      },
+      ...postIds.map((postId) => ({
+        queryKey: ['post', postId],
+        queryFn: () => fetchPost(postId),
+      })),
+    ],
+  })
+
+  const [userQuery, ...postQueries] = queries
+}
+```
+
+### With Combine Function
+
+```tsx
+function Dashboard() {
+  const combinedData = useQueries({
+    queries: [
+      { queryKey: ['user'], queryFn: fetchUser },
+      { queryKey: ['posts'], queryFn: fetchPosts },
+      { queryKey: ['comments'], queryFn: fetchComments },
+    ],
+    combine: (results) => {
+      return {
+        data: results.map((result) => result.data),
+        isPending: results.some((result) => result.isPending),
+        isError: results.some((result) => result.isError),
+      }
+    },
+  })
+
+  // combinedData has shape: { data: any[], isPending: boolean, isError: boolean }
+}
+```
+
+### Conditional Queries
+
+```tsx
+function UserDetails({ userId, includeStats }: { userId: number; includeStats: boolean }) {
+  const results = useQueries({
+    queries: [
+      {
+        queryKey: ['user', userId],
+        queryFn: () => fetchUser(userId),
+      },
+      {
+        queryKey: ['user-stats', userId],
+        queryFn: () => fetchUserStats(userId),
+        enabled: includeStats, // Only fetch if includeStats is true
+      },
+    ],
+  })
+
+  const [userQuery, statsQuery] = results
+}
+```
+
+### Dependent Queries
+
+```tsx
+function UserWithPosts({ userId }: { userId: number }) {
+  const results = useQueries({
+    queries: [
+      {
+        queryKey: ['user', userId],
+        queryFn: () => fetchUser(userId),
+      },
+      {
+        queryKey: ['posts', userId],
+        queryFn: () => fetchUserPosts(userId),
+        enabled: !!userId, // Only fetch posts if we have a userId
+      },
+    ],
+  })
+
+  const [userQuery, postsQuery] = results
+}
+```
+
+### With Error Handling
+
+```tsx
+function MultiDataFetch() {
+  const results = useQueries({
+    queries: [
+      {
+        queryKey: ['data1'],
+        queryFn: fetchData1,
+        retry: 3,
+      },
+      {
+        queryKey: ['data2'],
+        queryFn: fetchData2,
+        retry: 1,
+      },
+    ],
+  })
+
+  const errors = results
+    .filter((result) => result.isError)
+    .map((result) => result.error)
+
+  if (errors.length > 0) {
+    return (
+      <div>
+        {errors.map((error, i) => (
+          <div key={i}>Error: {error.message}</div>
+        ))}
+      </div>
+    )
+  }
+
+  return <div>All data loaded successfully</div>
+}
+```
+
+### With Type Inference from Query Options
+
+```tsx
+const userQueries = [
+  { queryKey: ['user', 1], queryFn: () => fetchUser(1) },
+  { queryKey: ['user', 2], queryFn: () => fetchUser(2) },
+] as const
+
+function Users() {
+  const results = useQueries({
+    queries: userQueries,
+  })
+
+  // Type inference works based on query definitions
+}
+```
+
+## Important Notes
+
+- The queries are executed in parallel
+- Each query maintains its own cache entry
+- The `combine` function is called on every render, so keep it lightweight or memoize expensive computations
+- Unlike `useQuery`, you cannot use `placeholderData` as a function in `useQueries`
+- The order of results matches the order of queries in the input array
+- Supports Suspense and Error Boundaries when individual queries have those options enabled
+
+## Source
+
+Implementation: [useQueries.ts:207](~/workspace/source/packages/react-query/src/useQueries.ts)

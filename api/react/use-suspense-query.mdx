@@ -1,0 +1,426 @@
+---
+title: useSuspenseQuery
+description: React hook for fetching data with React Suspense
+---
+
+# useSuspenseQuery
+
+The `useSuspenseQuery` hook is designed to work with React Suspense. It suspends rendering while data is being fetched and always returns defined data (never `undefined`).
+
+## Import
+
+```tsx
+import { useSuspenseQuery } from '@tanstack/react-query'
+```
+
+## Signature
+
+```tsx
+function useSuspenseQuery<
+  TQueryFnData = unknown,
+  TError = DefaultError,
+  TData = TQueryFnData,
+  TQueryKey extends QueryKey = QueryKey,
+>(
+  options: UseSuspenseQueryOptions<TQueryFnData, TError, TData, TQueryKey>,
+  queryClient?: QueryClient,
+): UseSuspenseQueryResult<TData, TError>
+```
+
+## Type Parameters
+
+<ParamField path="TQueryFnData" type="type" default="unknown">
+  The type of data returned by the query function
+</ParamField>
+
+<ParamField path="TError" type="type" default="DefaultError">
+  The type of error that can be thrown by the query function
+</ParamField>
+
+<ParamField path="TData" type="type" default="TQueryFnData">
+  The type of data returned by the select function (if provided), otherwise same as TQueryFnData
+</ParamField>
+
+<ParamField path="TQueryKey" type="type" default="QueryKey">
+  The type of the query key
+</ParamField>
+
+## Parameters
+
+<ParamField path="options" type="UseSuspenseQueryOptions" required>
+  Configuration options for the suspense query. Similar to `UseQueryOptions` but with some differences:
+
+  <ParamField path="queryKey" type="TQueryKey" required>
+    A unique key for the query. Must be an array.
+  </ParamField>
+
+  <ParamField path="queryFn" type="QueryFunction<TQueryFnData, TQueryKey>" required>
+    The function that will be called to fetch data. **Note:** `skipToken` is not allowed with `useSuspenseQuery`.
+  </ParamField>
+
+  <ParamField path="staleTime" type="number | ((query: Query) => number)" default="0">
+    Time in milliseconds after data is considered stale
+  </ParamField>
+
+  <ParamField path="gcTime" type="number" default="300000">
+    Time in milliseconds that unused/inactive cache data remains in memory
+  </ParamField>
+
+  <ParamField path="refetchInterval" type="number | false | ((query: Query) => number | false)" default="false">
+    If set to a number, the query will continuously refetch at this frequency in milliseconds
+  </ParamField>
+
+  <ParamField path="refetchIntervalInBackground" type="boolean" default="false">
+    If set to `true`, the query will continue to refetch while the window is in the background
+  </ParamField>
+
+  <ParamField path="refetchOnWindowFocus" type="boolean | 'always' | ((query: Query) => boolean | 'always')" default="true">
+    If set to `true`, the query will refetch on window focus if the data is stale
+  </ParamField>
+
+  <ParamField path="refetchOnMount" type="boolean | 'always' | ((query: Query) => boolean | 'always')" default="true">
+    If set to `true`, the query will refetch on mount if the data is stale
+  </ParamField>
+
+  <ParamField path="refetchOnReconnect" type="boolean | 'always' | ((query: Query) => boolean | 'always')" default="true">
+    If set to `true`, the query will refetch on reconnect if the data is stale
+  </ParamField>
+
+  <ParamField path="retry" type="boolean | number | (failureCount: number, error: TError) => boolean" default="3">
+    Number of retry attempts or function to determine if a request should be retried
+  </ParamField>
+
+  <ParamField path="retryDelay" type="number | (retryAttempt: number, error: TError) => number">
+    Function that receives a retry attempt number and returns the delay to apply before the next attempt
+  </ParamField>
+
+  <ParamField path="select" type="(data: TQueryFnData) => TData">
+    Function to transform or select a part of the data returned by the query function
+  </ParamField>
+
+  <ParamField path="structuralSharing" type="boolean | (oldData: unknown, newData: unknown) => unknown" default="true">
+    Set this to `false` to disable structural sharing between query results
+  </ParamField>
+
+  <ParamField path="networkMode" type="'online' | 'always' | 'offlineFirst'" default="'online'">
+    Controls when the query function is allowed to execute
+  </ParamField>
+
+  <ParamField path="notifyOnChangeProps" type="Array<keyof UseSuspenseQueryResult> | 'all'">
+    If set, the component will only re-render when one of the listed properties change
+  </ParamField>
+
+  <ParamField path="meta" type="Record<string, unknown>">
+    Optional metadata that can be used by query client plugins
+  </ParamField>
+</ParamField>
+
+<ParamField path="queryClient" type="QueryClient">
+  Optional QueryClient instance to use. If not provided, the client from the nearest `QueryClientProvider` will be used.
+</ParamField>
+
+## Returns
+
+The result is similar to `useQuery` but with guaranteed data:
+
+<ResponseField name="data" type="TData">
+  The data returned by the query function. **Always defined** (never `undefined`) once the component renders.
+</ResponseField>
+
+<ResponseField name="error" type="TError | null">
+  The error object for the query, if an error occurred
+</ResponseField>
+
+<ResponseField name="status" type="'pending' | 'error' | 'success'">
+  The status of the query. Will be `success` when the component renders (after suspense resolves).
+</ResponseField>
+
+<ResponseField name="fetchStatus" type="'fetching' | 'paused' | 'idle'">
+  The fetch status of the query
+</ResponseField>
+
+<ResponseField name="isSuccess" type="boolean">
+  Will be `true` when the component renders (after suspense resolves)
+</ResponseField>
+
+<ResponseField name="isError" type="boolean">
+  Derived from `status`. Will be `true` if the query is in `error` status
+</ResponseField>
+
+<ResponseField name="isFetching" type="boolean">
+  Will be `true` whenever the query is fetching (including background refetching)
+</ResponseField>
+
+<ResponseField name="isRefetching" type="boolean">
+  Will be `true` whenever the query is refetching (fetching while data already exists)
+</ResponseField>
+
+<ResponseField name="isStale" type="boolean">
+  Will be `true` if the data in the cache is invalidated or if the data is older than the given `staleTime`
+</ResponseField>
+
+<ResponseField name="refetch" type="(options?: { throwOnError?: boolean, cancelRefetch?: boolean }) => Promise<UseSuspenseQueryResult>">
+  Function to manually refetch the query
+</ResponseField>
+
+<ResponseField name="dataUpdatedAt" type="number">
+  Timestamp of when the data was last updated
+</ResponseField>
+
+<ResponseField name="errorUpdatedAt" type="number">
+  Timestamp of when the error was last updated
+</ResponseField>
+
+<ResponseField name="failureCount" type="number">
+  The failure count for the query
+</ResponseField>
+
+<ResponseField name="failureReason" type="TError | null">
+  The failure reason for the query retry
+</ResponseField>
+
+## Differences from useQuery
+
+1. **Suspends rendering**: The component will suspend (show fallback) while data is being fetched initially
+2. **Data always defined**: The `data` property is always defined (never `undefined`) when the component renders
+3. **No `enabled` option**: Queries always run (cannot be disabled)
+4. **No `placeholderData`**: Placeholder data is not supported
+5. **No `throwOnError` option**: Errors are always thrown to the nearest Error Boundary
+6. **No `skipToken`**: Cannot conditionally skip the query
+7. **No `isPending` state**: The component won't render until data is available
+8. **No `isPlaceholderData`**: Not included in result type
+
+## Examples
+
+### Basic Usage
+
+```tsx
+import { Suspense } from 'react'
+import { useSuspenseQuery } from '@tanstack/react-query'
+
+function TodoList() {
+  // data is always defined - no need to check for undefined!
+  const { data } = useSuspenseQuery({
+    queryKey: ['todos'],
+    queryFn: async () => {
+      const response = await fetch('/api/todos')
+      return response.json()
+    },
+  })
+
+  return (
+    <ul>
+      {data.map((todo) => (
+        <li key={todo.id}>{todo.title}</li>
+      ))}
+    </ul>
+  )
+}
+
+function App() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <TodoList />
+    </Suspense>
+  )
+}
+```
+
+### With Type Safety
+
+```tsx
+import { Suspense } from 'react'
+import { useSuspenseQuery } from '@tanstack/react-query'
+
+interface Todo {
+  id: number
+  title: string
+  completed: boolean
+}
+
+function TodoList() {
+  const { data } = useSuspenseQuery<Todo[]>({
+    queryKey: ['todos'],
+    queryFn: async () => {
+      const response = await fetch('/api/todos')
+      return response.json()
+    },
+  })
+
+  // data is typed as Todo[] (not Todo[] | undefined)
+  return (
+    <ul>
+      {data.map((todo) => (
+        <li key={todo.id}>{todo.title}</li>
+      ))}
+    </ul>
+  )
+}
+
+function App() {
+  return (
+    <Suspense fallback={<div>Loading todos...</div>}>
+      <TodoList />
+    </Suspense>
+  )
+}
+```
+
+### With Error Boundary
+
+```tsx
+import { Suspense } from 'react'
+import { ErrorBoundary } from 'react-error-boundary'
+import { useSuspenseQuery } from '@tanstack/react-query'
+
+function TodoList() {
+  const { data } = useSuspenseQuery({
+    queryKey: ['todos'],
+    queryFn: fetchTodos,
+  })
+
+  return (
+    <ul>
+      {data.map((todo) => (
+        <li key={todo.id}>{todo.title}</li>
+      ))}
+    </ul>
+  )
+}
+
+function App() {
+  return (
+    <ErrorBoundary fallback={<div>Error loading todos</div>}>
+      <Suspense fallback={<div>Loading...</div>}>
+        <TodoList />
+      </Suspense>
+    </ErrorBoundary>
+  )
+}
+```
+
+### Multiple Suspense Queries
+
+```tsx
+import { Suspense } from 'react'
+import { useSuspenseQuery } from '@tanstack/react-query'
+
+function UserProfile({ userId }: { userId: number }) {
+  const { data: user } = useSuspenseQuery({
+    queryKey: ['user', userId],
+    queryFn: () => fetchUser(userId),
+  })
+
+  const { data: posts } = useSuspenseQuery({
+    queryKey: ['posts', userId],
+    queryFn: () => fetchUserPosts(userId),
+  })
+
+  return (
+    <div>
+      <h1>{user.name}</h1>
+      <div>
+        {posts.map((post) => (
+          <article key={post.id}>{post.title}</article>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function App() {
+  return (
+    <Suspense fallback={<div>Loading profile...</div>}>
+      <UserProfile userId={1} />
+    </Suspense>
+  )
+}
+```
+
+### With Data Transformation
+
+```tsx
+import { Suspense } from 'react'
+import { useSuspenseQuery } from '@tanstack/react-query'
+
+function IncompleteTodos() {
+  const { data } = useSuspenseQuery({
+    queryKey: ['todos'],
+    queryFn: fetchTodos,
+    select: (data) => data.filter((todo) => !todo.completed),
+  })
+
+  // data contains only incomplete todos, and is always defined
+  return (
+    <ul>
+      {data.map((todo) => (
+        <li key={todo.id}>{todo.title}</li>
+      ))}
+    </ul>
+  )
+}
+
+function App() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <IncompleteTodos />
+    </Suspense>
+  )
+}
+```
+
+### Nested Suspense Boundaries
+
+```tsx
+import { Suspense } from 'react'
+import { useSuspenseQuery } from '@tanstack/react-query'
+
+function User() {
+  const { data } = useSuspenseQuery({
+    queryKey: ['user'],
+    queryFn: fetchUser,
+  })
+
+  return <div>{data.name}</div>
+}
+
+function Posts() {
+  const { data } = useSuspenseQuery({
+    queryKey: ['posts'],
+    queryFn: fetchPosts,
+  })
+
+  return (
+    <div>
+      {data.map((post) => (
+        <div key={post.id}>{post.title}</div>
+      ))}
+    </div>
+  )
+}
+
+function App() {
+  return (
+    <div>
+      <Suspense fallback={<div>Loading user...</div>}>
+        <User />
+      </Suspense>
+      <Suspense fallback={<div>Loading posts...</div>}>
+        <Posts />
+      </Suspense>
+    </div>
+  )
+}
+```
+
+## Best Practices
+
+1. **Always wrap with Suspense**: Components using `useSuspenseQuery` must be wrapped with a `Suspense` boundary
+2. **Use Error Boundaries**: Wrap with an Error Boundary to handle errors gracefully
+3. **Consider granular boundaries**: Use multiple Suspense boundaries for better UX when loading different parts of the UI
+4. **Prefetch data**: Consider prefetching data before rendering to avoid showing loading states
+5. **Not for conditional queries**: Use `useQuery` with `enabled` if you need conditional fetching
+
+## Source
+
+Implementation: [useSuspenseQuery.ts:8](~/workspace/source/packages/react-query/src/useSuspenseQuery.ts)

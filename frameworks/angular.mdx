@@ -1,0 +1,633 @@
+---
+title: Angular
+description: TanStack Query for Angular - Signals-based data fetching
+---
+
+TanStack Query for Angular provides signals-based primitives for fetching, caching, and updating asynchronous data in Angular applications. It leverages Angular's modern signals API and supports zoneless mode.
+
+<Note>
+This package is currently experimental and requires Angular 16+.
+</Note>
+
+## Installation
+
+```bash
+npm install @tanstack/angular-query-experimental
+# or
+pnpm add @tanstack/angular-query-experimental
+# or
+yarn add @tanstack/angular-query-experimental
+```
+
+## Setup
+
+Provide TanStack Query in your application:
+
+```ts
+import { provideAngularQuery, QueryClient } from '@tanstack/angular-query-experimental'
+import { ApplicationConfig } from '@angular/core'
+
+export const appConfig: ApplicationConfig = {
+  providers: [
+    provideAngularQuery(new QueryClient()),
+  ],
+}
+```
+
+### With Custom Configuration
+
+```ts
+import { provideAngularQuery, QueryClient } from '@tanstack/angular-query-experimental'
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5, // 5 minutes
+      gcTime: 1000 * 60 * 10, // 10 minutes
+    },
+  },
+})
+
+export const appConfig: ApplicationConfig = {
+  providers: [
+    provideAngularQuery(queryClient),
+  ],
+}
+```
+
+## Core Inject Functions
+
+### injectQuery
+
+Fetch and cache data with the `injectQuery` function:
+
+```ts
+import { Component, signal } from '@angular/core'
+import { injectQuery } from '@tanstack/angular-query-experimental'
+
+@Component({
+  selector: 'app-todos',
+  template: `
+    @if (query.isLoading()) {
+      <div>Loading...</div>
+    } @else if (query.error()) {
+      <div>Error: {{ query.error().message }}</div>
+    } @else {
+      <ul>
+        @for (todo of query.data(); track todo.id) {
+          <li>{{ todo.title }}</li>
+        }
+      </ul>
+    }
+  `,
+})
+export class TodosComponent {
+  query = injectQuery(() => ({
+    queryKey: ['todos'],
+    queryFn: async () => {
+      const res = await fetch('/api/todos')
+      return res.json()
+    },
+  }))
+}
+```
+
+<Tip>
+`injectQuery` returns a signal-based result. Access properties like `data()`, `isLoading()`, and `error()` as signals.
+</Tip>
+
+### Reactive Queries with Signals
+
+Angular Query automatically tracks signal dependencies:
+
+```ts
+import { Component, signal } from '@angular/core'
+import { injectQuery } from '@tanstack/angular-query-experimental'
+
+@Component({
+  selector: 'app-todo-detail',
+  template: `
+    <button (click)="todoId.set(todoId() + 1)">Next Todo</button>
+    @if (query.data(); as todo) {
+      <h1>{{ todo.title }}</h1>
+    }
+  `,
+})
+export class TodoDetailComponent {
+  todoId = signal(1)
+
+  query = injectQuery(() => ({
+    queryKey: ['todo', this.todoId()],
+    queryFn: async () => {
+      const res = await fetch(`/api/todos/${this.todoId()}`)
+      return res.json()
+    },
+  }))
+}
+```
+
+<Note>
+The function passed to `injectQuery` runs in a reactive context. When signals change, the query automatically updates.
+</Note>
+
+### injectMutation
+
+Perform side effects with mutations:
+
+```ts
+import { Component } from '@angular/core'
+import { injectMutation, injectQueryClient } from '@tanstack/angular-query-experimental'
+
+@Component({
+  selector: 'app-add-todo',
+  template: `
+    <button 
+      (click)="addTodo()"
+      [disabled]="mutation.isPending()"
+    >
+      {{ mutation.isPending() ? 'Adding...' : 'Add Todo' }}
+    </button>
+  `,
+})
+export class AddTodoComponent {
+  queryClient = injectQueryClient()
+
+  mutation = injectMutation(() => ({
+    mutationFn: async (newTodo: { title: string }) => {
+      const res = await fetch('/api/todos', {
+        method: 'POST',
+        body: JSON.stringify(newTodo),
+      })
+      return res.json()
+    },
+    onSuccess: () => {
+      this.queryClient.invalidateQueries({ queryKey: ['todos'] })
+    },
+  }))
+
+  addTodo() {
+    this.mutation.mutate({ title: 'New Todo' })
+  }
+}
+```
+
+### injectInfiniteQuery
+
+Implement infinite scrolling:
+
+```ts
+import { Component } from '@angular/core'
+import { injectInfiniteQuery } from '@tanstack/angular-query-experimental'
+
+@Component({
+  selector: 'app-posts',
+  template: `
+    @for (page of query.data()?.pages; track $index) {
+      @for (post of page.posts; track post.id) {
+        <div>{{ post.title }}</div>
+      }
+    }
+    <button
+      (click)="query.fetchNextPage()"
+      [disabled]="!query.hasNextPage() || query.isFetchingNextPage()"
+    >
+      {{ query.isFetchingNextPage() ? 'Loading...' : 'Load More' }}
+    </button>
+  `,
+})
+export class PostsComponent {
+  query = injectInfiniteQuery(() => ({
+    queryKey: ['posts'],
+    queryFn: async ({ pageParam = 0 }) => {
+      const res = await fetch(`/api/posts?page=${pageParam}`)
+      return res.json()
+    },
+    getNextPageParam: (lastPage: any) => lastPage.nextCursor,
+    initialPageParam: 0,
+  }))
+}
+```
+
+## Signals Integration
+
+### Signal-Based Results
+
+All query results are signals:
+
+```ts
+import { Component, computed } from '@angular/core'
+import { injectQuery } from '@tanstack/angular-query-experimental'
+
+@Component({
+  selector: 'app-todo-stats',
+  template: `
+    <div>Total: {{ totalTodos() }}</div>
+    <div>Completed: {{ completedTodos() }}</div>
+  `,
+})
+export class TodoStatsComponent {
+  query = injectQuery(() => ({
+    queryKey: ['todos'],
+    queryFn: fetchTodos,
+  }))
+
+  totalTodos = computed(() => this.query.data()?.length ?? 0)
+  
+  completedTodos = computed(() => 
+    this.query.data()?.filter(t => t.completed).length ?? 0
+  )
+}
+```
+
+### Enabled Queries with Signals
+
+```ts
+import { Component, signal } from '@angular/core'
+import { injectQuery } from '@tanstack/angular-query-experimental'
+
+@Component({
+  selector: 'app-conditional-query',
+  template: `
+    <label>
+      <input type="checkbox" [(ngModel)]="enabled" />
+      Enable query
+    </label>
+    @if (query.data(); as data) {
+      <div>{{ data.length }} results</div>
+    }
+  `,
+})
+export class ConditionalQueryComponent {
+  enabled = signal(false)
+
+  query = injectQuery(() => ({
+    queryKey: ['todos'],
+    queryFn: fetchTodos,
+    enabled: this.enabled(), // Reactive to signal changes
+  }))
+}
+```
+
+## Zoneless Support
+
+Angular Query works seamlessly in zoneless mode:
+
+```ts
+import { ApplicationConfig } from '@angular/core'
+import { provideExperimentalZonelessChangeDetection } from '@angular/core'
+import { provideAngularQuery, QueryClient } from '@tanstack/angular-query-experimental'
+
+export const appConfig: ApplicationConfig = {
+  providers: [
+    provideExperimentalZonelessChangeDetection(),
+    provideAngularQuery(new QueryClient()),
+  ],
+}
+```
+
+<Note>
+Angular Query uses signals internally, making it fully compatible with Angular's zoneless change detection.
+</Note>
+
+## Advanced Features
+
+### Query Options Factory
+
+```ts
+import { queryOptions } from '@tanstack/angular-query-experimental'
+
+export const todoQueries = {
+  all: () => queryOptions({
+    queryKey: ['todos'],
+    queryFn: fetchTodos,
+  }),
+  detail: (id: number) => queryOptions({
+    queryKey: ['todos', id],
+    queryFn: () => fetchTodo(id),
+  }),
+}
+
+// Usage
+@Component({
+  template: `<div>{{ query.data()?.title }}</div>`,
+})
+export class TodoDetailComponent {
+  query = injectQuery(() => todoQueries.detail(1))
+}
+```
+
+### injectMutationState
+
+Track all mutations globally:
+
+```ts
+import { Component } from '@angular/core'
+import { injectMutationState } from '@tanstack/angular-query-experimental'
+
+@Component({
+  selector: 'app-global-loading',
+  template: `
+    @if (pendingCount() > 0) {
+      <div>Saving {{ pendingCount() }} changes...</div>
+    }
+  `,
+})
+export class GlobalLoadingComponent {
+  mutations = injectMutationState(() => ({
+    filters: { status: 'pending' },
+  }))
+
+  pendingCount = computed(() => this.mutations().length)
+}
+```
+
+### injectIsFetching
+
+Show a global loading indicator:
+
+```ts
+import { Component } from '@angular/core'
+import { injectIsFetching } from '@tanstack/angular-query-experimental'
+
+@Component({
+  selector: 'app-loading-bar',
+  template: `
+    @if (isFetching()) {
+      <div class="loading-bar">Loading...</div>
+    }
+  `,
+})
+export class LoadingBarComponent {
+  isFetching = injectIsFetching()
+}
+```
+
+## Dependency Injection
+
+### Custom Injector
+
+```ts
+import { Component, Injector, inject } from '@angular/core'
+import { injectQuery } from '@tanstack/angular-query-experimental'
+
+@Component({
+  selector: 'app-custom',
+  template: `...`,
+})
+export class CustomComponent {
+  injector = inject(Injector)
+
+  query = injectQuery(
+    () => ({
+      queryKey: ['todos'],
+      queryFn: fetchTodos,
+    }),
+    { injector: this.injector }
+  )
+}
+```
+
+### Outside Injection Context
+
+```ts
+import { Component, effect } from '@angular/core'
+import { injectQuery } from '@tanstack/angular-query-experimental'
+
+@Component({
+  selector: 'app-todos',
+  template: `...`,
+})
+export class TodosComponent {
+  query = injectQuery(() => ({ queryKey: ['todos'], queryFn: fetchTodos }))
+
+  constructor() {
+    effect(() => {
+      if (this.query.isSuccess()) {
+        console.log('Query succeeded:', this.query.data())
+      }
+    })
+  }
+}
+```
+
+## TypeScript
+
+Full TypeScript support with type inference:
+
+```ts
+import { Component } from '@angular/core'
+import { injectQuery } from '@tanstack/angular-query-experimental'
+
+interface Todo {
+  id: number
+  title: string
+  completed: boolean
+}
+
+@Component({
+  selector: 'app-todos',
+  template: `...`,
+})
+export class TodosComponent {
+  query = injectQuery(() => ({
+    queryKey: ['todos'],
+    queryFn: async (): Promise<Todo[]> => {
+      const res = await fetch('/api/todos')
+      return res.json()
+    },
+  }))
+
+  // query.data() is typed as Signal<Todo[] | undefined>
+}
+```
+
+## SSR Support
+
+For Angular Universal (Server-Side Rendering):
+
+```ts
+import { ApplicationConfig } from '@angular/core'
+import { provideClientHydration } from '@angular/platform-browser'
+import { provideAngularQuery, QueryClient } from '@tanstack/angular-query-experimental'
+
+export const appConfig: ApplicationConfig = {
+  providers: [
+    provideClientHydration(),
+    provideAngularQuery(new QueryClient({
+      defaultOptions: {
+        queries: {
+          staleTime: 60 * 1000, // 1 minute
+        },
+      },
+    })),
+  ],
+}
+```
+
+## Pending Tasks Integration
+
+Angular Query automatically integrates with Angular's pending tasks for SSR:
+
+```ts
+// Queries automatically mark themselves as pending during fetching
+// This ensures SSR waits for queries to complete before rendering
+
+const query = injectQuery(() => ({
+  queryKey: ['todos'],
+  queryFn: fetchTodos,
+  // Automatically tracked as a pending task in SSR
+}))
+```
+
+## DevTools
+
+Install the Angular Query DevTools:
+
+```bash
+npm install @tanstack/angular-query-experimental
+```
+
+Setup:
+
+```ts
+import { ApplicationConfig } from '@angular/core'
+import { 
+  provideAngularQuery, 
+  QueryClient,
+  withDevtools 
+} from '@tanstack/angular-query-experimental/devtools'
+
+export const appConfig: ApplicationConfig = {
+  providers: [
+    provideAngularQuery(
+      new QueryClient(),
+      withDevtools()
+    ),
+  ],
+}
+```
+
+## Angular-Specific Patterns
+
+### Services Integration
+
+```ts
+import { Injectable, inject } from '@angular/core'
+import { HttpClient } from '@angular/common/http'
+import { injectQuery } from '@tanstack/angular-query-experimental'
+import { lastValueFrom } from 'rxjs'
+
+@Injectable({ providedIn: 'root' })
+export class TodoService {
+  http = inject(HttpClient)
+
+  getTodos() {
+    return injectQuery(() => ({
+      queryKey: ['todos'],
+      queryFn: () => lastValueFrom(this.http.get<Todo[]>('/api/todos')),
+    }))
+  }
+}
+
+// Usage in component
+@Component({
+  selector: 'app-todos',
+  template: `...`,
+})
+export class TodosComponent {
+  todoService = inject(TodoService)
+  query = this.todoService.getTodos()
+}
+```
+
+### RxJS Integration
+
+```ts
+import { Component, inject } from '@angular/core'
+import { HttpClient } from '@angular/common/http'
+import { injectQuery } from '@tanstack/angular-query-experimental'
+import { lastValueFrom } from 'rxjs'
+
+@Component({
+  selector: 'app-todos',
+  template: `...`,
+})
+export class TodosComponent {
+  http = inject(HttpClient)
+
+  query = injectQuery(() => ({
+    queryKey: ['todos'],
+    queryFn: () => lastValueFrom(this.http.get('/api/todos')),
+  }))
+}
+```
+
+<Tip>
+Use `lastValueFrom` to convert RxJS observables to promises for use with TanStack Query.
+</Tip>
+
+## Migration Tips
+
+### From Angular HTTP Client
+
+<Tabs>
+  <Tab title="TanStack Query">
+```ts
+import { injectQuery } from '@tanstack/angular-query-experimental'
+
+query = injectQuery(() => ({
+  queryKey: ['todos'],
+  queryFn: async () => {
+    const res = await fetch('/api/todos')
+    return res.json()
+  },
+}))
+```
+  </Tab>
+  <Tab title="HttpClient">
+```ts
+import { HttpClient, inject } from '@angular/core'
+
+http = inject(HttpClient)
+todos$ = this.http.get('/api/todos')
+```
+  </Tab>
+</Tabs>
+
+## Performance Optimization
+
+### Signal Equality
+
+```ts
+import { injectQuery } from '@tanstack/angular-query-experimental'
+import { computed } from '@angular/core'
+
+query = injectQuery(() => ({
+  queryKey: ['todos'],
+  queryFn: fetchTodos,
+}))
+
+// Computed signals automatically use reference equality
+completedCount = computed(() => 
+  this.query.data()?.filter(t => t.completed).length ?? 0
+)
+```
+
+### Structural Sharing
+
+Angular Query uses structural sharing by default to minimize signal updates:
+
+```ts
+query = injectQuery(() => ({
+  queryKey: ['todos'],
+  queryFn: fetchTodos,
+  // Structural sharing enabled by default
+  // Only changed parts of data trigger signal updates
+}))
+```
+
+## Related Resources
+
+- [Angular Signals Documentation](https://angular.io/guide/signals)
+- [Angular Query DevTools](/guides/devtools)
+- [Zoneless Angular Guide](https://angular.io/guide/experimental/zoneless)

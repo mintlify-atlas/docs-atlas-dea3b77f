@@ -1,0 +1,502 @@
+---
+title: createInfiniteQuery
+description: Svelte function for fetching paginated or infinite data
+---
+
+Fetch paginated or infinite scrolling data with the `createInfiniteQuery` function. It manages multiple pages of data and provides methods to load more pages in Svelte 5 applications.
+
+## Signature
+
+```ts
+function createInfiniteQuery<TQueryFnData, TError, TData, TQueryKey, TPageParam>(
+  options: Accessor<CreateInfiniteQueryOptions<TQueryFnData, TError, TData, TQueryKey, TPageParam>>,
+  queryClient?: Accessor<QueryClient>,
+): CreateInfiniteQueryResult<TData, TError>
+```
+
+## Parameters
+
+<ParamField path="options" type="Accessor<CreateInfiniteQueryOptions<TQueryFnData, TError, TData, TQueryKey, TPageParam>>" required>
+  A function (accessor) returning infinite query configuration options.
+  
+  <Expandable title="properties">
+    <ParamField path="queryKey" type="QueryKey" required>
+      Unique identifier for the query.
+    </ParamField>
+    
+    <ParamField path="queryFn" type="(context: QueryFunctionContext<TQueryKey, TPageParam>) => Promise<TQueryFnData>" required>
+      Function that fetches a page of data. Receives `pageParam` in context.
+    </ParamField>
+    
+    <ParamField path="initialPageParam" type="TPageParam" required>
+      The initial page parameter for the first page.
+    </ParamField>
+    
+    <ParamField path="getNextPageParam" type="(lastPage: TQueryFnData, allPages: TQueryFnData[], lastPageParam: TPageParam, allPageParams: TPageParam[]) => TPageParam | undefined | null" required>
+      Function to determine the next page parameter. Return `undefined` or `null` when there are no more pages.
+    </ParamField>
+    
+    <ParamField path="getPreviousPageParam" type="(firstPage: TQueryFnData, allPages: TQueryFnData[], firstPageParam: TPageParam, allPageParams: TPageParam[]) => TPageParam | undefined | null">
+      Function to determine the previous page parameter for bi-directional pagination.
+    </ParamField>
+    
+    <ParamField path="enabled" type="boolean">
+      Set to `false` to disable automatic query execution.
+    </ParamField>
+    
+    <ParamField path="staleTime" type="number">
+      Time in milliseconds until cached data is considered stale.
+    </ParamField>
+    
+    <ParamField path="gcTime" type="number">
+      Time in milliseconds before unused data is garbage collected.
+    </ParamField>
+    
+    <ParamField path="refetchOnWindowFocus" type="boolean">
+      Refetch when window regains focus.
+    </ParamField>
+    
+    <ParamField path="select" type="(data: InfiniteData<TQueryFnData, TPageParam>) => TData">
+      Transform or select a part of the data.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="queryClient" type="Accessor<QueryClient>">
+  Accessor returning a custom QueryClient instance. If not provided, uses the client from context.
+</ParamField>
+
+## Returns
+
+<ResponseField name="CreateInfiniteQueryResult<TData, TError>" type="object">
+  Reactive infinite query state and methods.
+  
+  <Expandable title="properties">
+    <ResponseField name="data" type="InfiniteData<TData, TPageParam> | undefined">
+      Object containing all pages of data with `pages` and `pageParams` arrays.
+    </ResponseField>
+    
+    <ResponseField name="error" type="TError | null">
+      The error object if the query failed.
+    </ResponseField>
+    
+    <ResponseField name="isLoading" type="boolean">
+      `true` when fetching the first page for the first time.
+    </ResponseField>
+    
+    <ResponseField name="isFetching" type="boolean">
+      `true` whenever the query is fetching (including additional pages).
+    </ResponseField>
+    
+    <ResponseField name="isFetchingNextPage" type="boolean">
+      `true` when fetching the next page.
+    </ResponseField>
+    
+    <ResponseField name="isFetchingPreviousPage" type="boolean">
+      `true` when fetching the previous page.
+    </ResponseField>
+    
+    <ResponseField name="hasNextPage" type="boolean">
+      `true` if there is a next page to fetch.
+    </ResponseField>
+    
+    <ResponseField name="hasPreviousPage" type="boolean">
+      `true` if there is a previous page to fetch.
+    </ResponseField>
+    
+    <ResponseField name="fetchNextPage" type="(options?: FetchNextPageOptions) => Promise<InfiniteQueryObserverResult>">
+      Fetch the next page of data.
+    </ResponseField>
+    
+    <ResponseField name="fetchPreviousPage" type="(options?: FetchPreviousPageOptions) => Promise<InfiniteQueryObserverResult>">
+      Fetch the previous page of data.
+    </ResponseField>
+    
+    <ResponseField name="isSuccess" type="boolean">
+      `true` when the query has successfully fetched data.
+    </ResponseField>
+    
+    <ResponseField name="isError" type="boolean">
+      `true` when the query encountered an error.
+    </ResponseField>
+    
+    <ResponseField name="status" type="'pending' | 'error' | 'success'">
+      The current status of the query.
+    </ResponseField>
+    
+    <ResponseField name="refetch" type="() => Promise<InfiniteQueryObserverResult>">
+      Manually trigger a refetch of all pages.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Type Parameters
+
+- `TQueryFnData` - Type of data returned by each page
+- `TError` - Type of error (defaults to `DefaultError`)
+- `TData` - Type of final data (defaults to `InfiniteData<TQueryFnData>`)
+- `TQueryKey` - Type of the query key (defaults to `QueryKey`)
+- `TPageParam` - Type of page parameter (defaults to `unknown`)
+
+## Examples
+
+### Basic Infinite Scroll (Svelte 5 Runes)
+
+```svelte
+<script lang="ts">
+import { createInfiniteQuery } from '@tanstack/svelte-query'
+
+const query = createInfiniteQuery(() => ({
+  queryKey: ['posts'],
+  queryFn: async ({ pageParam }) => {
+    const res = await fetch(`/api/posts?page=${pageParam}`)
+    return res.json()
+  },
+  initialPageParam: 0,
+  getNextPageParam: (lastPage, allPages) => {
+    return lastPage.hasMore ? allPages.length : undefined
+  },
+}))
+
+function loadMore() {
+  query.fetchNextPage()
+}
+</script>
+
+{#each query.data?.pages ?? [] as page}
+  {#each page.posts as post}
+    <div>
+      <h3>{post.title}</h3>
+      <p>{post.body}</p>
+    </div>
+  {/each}
+{/each}
+
+<button 
+  onclick={loadMore}
+  disabled={!query.hasNextPage || query.isFetchingNextPage}
+>
+  {#if query.isFetchingNextPage}
+    Loading more...
+  {:else if query.hasNextPage}
+    Load More
+  {:else}
+    No more posts
+  {/if}
+</button>
+```
+
+### Cursor-Based Pagination
+
+```svelte
+<script lang="ts">
+import { createInfiniteQuery } from '@tanstack/svelte-query'
+
+const query = createInfiniteQuery(() => ({
+  queryKey: ['posts'],
+  queryFn: async ({ pageParam }) => {
+    const res = await fetch(`/api/posts?cursor=${pageParam}`)
+    return res.json()
+  },
+  initialPageParam: 0,
+  getNextPageParam: (lastPage) => lastPage.nextCursor,
+}))
+</script>
+```
+
+### Bi-directional Pagination
+
+```svelte
+<script lang="ts">
+import { createInfiniteQuery } from '@tanstack/svelte-query'
+
+const query = createInfiniteQuery(() => ({
+  queryKey: ['posts'],
+  queryFn: async ({ pageParam }) => {
+    const res = await fetch(`/api/posts?cursor=${pageParam}`)
+    return res.json()
+  },
+  initialPageParam: 0,
+  getNextPageParam: (lastPage) => lastPage.nextCursor,
+  getPreviousPageParam: (firstPage) => firstPage.prevCursor,
+}))
+</script>
+
+<button 
+  onclick={() => query.fetchPreviousPage()}
+  disabled={!query.hasPreviousPage || query.isFetchingPreviousPage}
+>
+  Load Previous
+</button>
+
+<!-- Posts display -->
+
+<button 
+  onclick={() => query.fetchNextPage()}
+  disabled={!query.hasNextPage || query.isFetchingNextPage}
+>
+  Load Next
+</button>
+```
+
+### With TypeScript
+
+```svelte
+<script lang="ts">
+import { createInfiniteQuery } from '@tanstack/svelte-query'
+
+interface Post {
+  id: number
+  title: string
+  body: string
+}
+
+interface PostsPage {
+  posts: Post[]
+  nextCursor?: number
+  hasMore: boolean
+}
+
+const query = createInfiniteQuery(() => ({
+  queryKey: ['posts'],
+  queryFn: async ({ pageParam }): Promise<PostsPage> => {
+    const res = await fetch(`/api/posts?cursor=${pageParam}`)
+    return res.json()
+  },
+  initialPageParam: 0,
+  getNextPageParam: (lastPage) => lastPage.nextCursor,
+}))
+
+// query.data.pages is typed as PostsPage[]
+</script>
+```
+
+### Reactive Query Parameters
+
+```svelte
+<script lang="ts">
+import { createInfiniteQuery } from '@tanstack/svelte-query'
+
+let filter = $state('all')
+
+const query = createInfiniteQuery(() => ({
+  queryKey: ['posts', filter],
+  queryFn: async ({ pageParam }) => {
+    const res = await fetch(
+      `/api/posts?filter=${filter}&cursor=${pageParam}`
+    )
+    return res.json()
+  },
+  initialPageParam: 0,
+  getNextPageParam: (lastPage) => lastPage.nextCursor,
+}))
+</script>
+
+<select bind:value={filter}>
+  <option value="all">All</option>
+  <option value="active">Active</option>
+  <option value="completed">Completed</option>
+</select>
+```
+
+### Infinite Scroll with Intersection Observer
+
+```svelte
+<script lang="ts">
+import { createInfiniteQuery } from '@tanstack/svelte-query'
+import { onMount } from 'svelte'
+
+let loadMoreRef: HTMLDivElement
+
+const query = createInfiniteQuery(() => ({
+  queryKey: ['posts'],
+  queryFn: fetchPosts,
+  initialPageParam: 0,
+  getNextPageParam: (lastPage) => lastPage.nextCursor,
+}))
+
+onMount(() => {
+  const observer = new IntersectionObserver(
+    ([entry]) => {
+      if (
+        entry.isIntersecting && 
+        query.hasNextPage && 
+        !query.isFetchingNextPage
+      ) {
+        query.fetchNextPage()
+      }
+    },
+    { threshold: 1.0 }
+  )
+
+  if (loadMoreRef) {
+    observer.observe(loadMoreRef)
+  }
+
+  return () => observer.disconnect()
+})
+</script>
+
+<div>
+  {#each query.data?.pages ?? [] as page}
+    {#each page.posts as post}
+      <div>{post.title}</div>
+    {/each}
+  {/each}
+  
+  {#if query.hasNextPage}
+    <div bind:this={loadMoreRef}>
+      {#if query.isFetchingNextPage}
+        Loading...
+      {/if}
+    </div>
+  {/if}
+</div>
+```
+
+### Refetch All Pages
+
+```svelte
+<script lang="ts">
+import { createInfiniteQuery } from '@tanstack/svelte-query'
+
+const query = createInfiniteQuery(() => ({
+  queryKey: ['posts'],
+  queryFn: fetchPosts,
+  initialPageParam: 0,
+  getNextPageParam: (lastPage) => lastPage.nextCursor,
+}))
+
+function refreshAll() {
+  query.refetch() // Refetches all loaded pages
+}
+</script>
+
+<button onclick={refreshAll}>Refresh All</button>
+```
+
+### With Loading States
+
+```svelte
+<script lang="ts">
+import { createInfiniteQuery } from '@tanstack/svelte-query'
+
+const query = createInfiniteQuery(() => ({
+  queryKey: ['posts'],
+  queryFn: fetchPosts,
+  initialPageParam: 0,
+  getNextPageParam: (lastPage) => lastPage.nextCursor,
+}))
+</script>
+
+{#if query.isLoading}
+  <div>Loading first page...</div>
+{:else if query.isError}
+  <div>Error: {query.error?.message}</div>
+{:else if query.isSuccess}
+  {#each query.data.pages as page}
+    {#each page.posts as post}
+      <div>{post.title}</div>
+    {/each}
+  {/each}
+  
+  {#if query.hasNextPage}
+    <button 
+      onclick={() => query.fetchNextPage()}
+      disabled={query.isFetchingNextPage}
+    >
+      {query.isFetchingNextPage ? 'Loading...' : 'Load More'}
+    </button>
+  {/if}
+{/if}
+```
+
+### Page-Based Pagination
+
+```svelte
+<script lang="ts">
+import { createInfiniteQuery } from '@tanstack/svelte-query'
+
+const query = createInfiniteQuery(() => ({
+  queryKey: ['posts'],
+  queryFn: async ({ pageParam }) => {
+    const res = await fetch(`/api/posts?page=${pageParam}&limit=10`)
+    return res.json()
+  },
+  initialPageParam: 1,
+  getNextPageParam: (lastPage, allPages, lastPageParam) => {
+    return lastPage.hasMore ? lastPageParam + 1 : undefined
+  },
+  getPreviousPageParam: (firstPage, allPages, firstPageParam) => {
+    return firstPageParam > 1 ? firstPageParam - 1 : undefined
+  },
+}))
+</script>
+```
+
+### Search with Infinite Scroll
+
+```svelte
+<script lang="ts">
+import { createInfiniteQuery } from '@tanstack/svelte-query'
+
+let searchTerm = $state('')
+let debouncedSearch = $state('')
+
+// Debounce search
+$effect(() => {
+  const timeout = setTimeout(() => {
+    debouncedSearch = searchTerm
+  }, 300)
+  
+  return () => clearTimeout(timeout)
+})
+
+const query = createInfiniteQuery(() => ({
+  queryKey: ['posts', 'search', debouncedSearch],
+  queryFn: async ({ pageParam }) => {
+    const res = await fetch(
+      `/api/posts?search=${debouncedSearch}&cursor=${pageParam}`
+    )
+    return res.json()
+  },
+  initialPageParam: 0,
+  getNextPageParam: (lastPage) => lastPage.nextCursor,
+  enabled: debouncedSearch.length > 0,
+}))
+</script>
+
+<input 
+  type="text" 
+  bind:value={searchTerm}
+  placeholder="Search posts..."
+/>
+
+{#if query.data}
+  {#each query.data.pages as page}
+    {#each page.posts as post}
+      <div>{post.title}</div>
+    {/each}
+  {/each}
+{/if}
+```
+
+## Notes
+
+<Note>
+Svelte Query uses Svelte 5's runes mode. The options parameter must be an accessor (function) to track reactive dependencies.
+</Note>
+
+<Tip>
+`initialPageParam` is required in v5. Make sure to provide it when creating infinite queries.
+</Tip>
+
+<Warning>
+When using `refetch()`, all pages will be refetched. For better UX, consider using `invalidateQueries` to only refetch when needed.
+</Warning>
+
+## Related
+
+- [createQuery](/api/svelte/create-query) - For non-paginated data
+- [Infinite Queries Guide](/guides/infinite-queries) - Detailed guide on infinite queries
+- [Svelte Guide](/frameworks/svelte) - Complete guide to Svelte Query

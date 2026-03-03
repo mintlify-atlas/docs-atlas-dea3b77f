@@ -1,122 +1,142 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "TanStack Query",
+  "theme": "palm",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#00C8C8",
+    "light": "#00E5E5",
+    "dark": "#00A0A0"
   },
-  "favicon": "/favicon.svg",
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/TanStack/query"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/TanStack/query"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Documentation",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Overview",
             "pages": [
-              "index",
-              "quickstart",
-              "development"
+              "introduction",
+              "installation",
+              "quickstart"
             ]
           },
           {
-            "group": "Customization",
+            "group": "Core Concepts",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
+              "concepts/queries",
+              "concepts/mutations",
+              "concepts/query-keys",
+              "concepts/query-functions",
+              "concepts/caching",
+              "concepts/invalidation"
             ]
           },
           {
-            "group": "Writing content",
+            "group": "Framework Guides",
             "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
+              "frameworks/react",
+              "frameworks/vue",
+              "frameworks/solid",
+              "frameworks/svelte",
+              "frameworks/angular",
+              "frameworks/preact"
             ]
           },
           {
-            "group": "AI tools",
+            "group": "Advanced Topics",
             "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "guides/infinite-queries",
+              "guides/paginated-queries",
+              "guides/optimistic-updates",
+              "guides/ssr",
+              "guides/prefetching",
+              "guides/devtools",
+              "guides/persistence",
+              "guides/testing"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "API Reference",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Core API",
             "pages": [
-              "api-reference/introduction"
+              "api/query-client",
+              "api/query-cache",
+              "api/mutation-cache",
+              "api/query-observer",
+              "api/infinite-query-observer",
+              "api/queries-observer"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "React",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "api/react/use-query",
+              "api/react/use-mutation",
+              "api/react/use-infinite-query",
+              "api/react/use-queries",
+              "api/react/use-suspense-query",
+              "api/react/query-client-provider"
+            ]
+          },
+          {
+            "group": "Vue",
+            "pages": [
+              "api/vue/use-query",
+              "api/vue/use-mutation",
+              "api/vue/use-infinite-query",
+              "api/vue/use-queries"
+            ]
+          },
+          {
+            "group": "Solid",
+            "pages": [
+              "api/solid/create-query",
+              "api/solid/create-mutation",
+              "api/solid/create-infinite-query"
+            ]
+          },
+          {
+            "group": "Svelte",
+            "pages": [
+              "api/svelte/create-query",
+              "api/svelte/create-mutation",
+              "api/svelte/create-infinite-query"
+            ]
+          },
+          {
+            "group": "Angular",
+            "pages": [
+              "api/angular/inject-query",
+              "api/angular/inject-mutation",
+              "api/angular/inject-infinite-query"
+            ]
+          },
+          {
+            "group": "Utilities",
+            "pages": [
+              "api/utilities/focus-manager",
+              "api/utilities/online-manager",
+              "api/utilities/notify-manager",
+              "api/utilities/timeout-manager"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

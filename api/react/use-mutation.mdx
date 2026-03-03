@@ -1,0 +1,312 @@
+---
+title: useMutation
+description: React hook for creating, updating, or deleting data
+---
+
+# useMutation
+
+The `useMutation` hook is used to create, update, or delete data. Unlike queries, mutations are typically used to modify server-side data.
+
+## Import
+
+```tsx
+import { useMutation } from '@tanstack/react-query'
+```
+
+## Signature
+
+```tsx
+function useMutation<
+  TData = unknown,
+  TError = DefaultError,
+  TVariables = void,
+  TOnMutateResult = unknown,
+>(
+  options: UseMutationOptions<TData, TError, TVariables, TOnMutateResult>,
+  queryClient?: QueryClient,
+): UseMutationResult<TData, TError, TVariables, TOnMutateResult>
+```
+
+## Type Parameters
+
+<ParamField path="TData" type="type" default="unknown">
+  The type of data returned by the mutation function
+</ParamField>
+
+<ParamField path="TError" type="type" default="DefaultError">
+  The type of error that can be thrown by the mutation function
+</ParamField>
+
+<ParamField path="TVariables" type="type" default="void">
+  The type of variables object passed to the mutation function
+</ParamField>
+
+<ParamField path="TOnMutateResult" type="type" default="unknown">
+  The type of the context returned from the onMutate callback
+</ParamField>
+
+## Parameters
+
+<ParamField path="options" type="UseMutationOptions" required>
+  Configuration options for the mutation
+
+  <ParamField path="mutationFn" type="(variables: TVariables) => Promise<TData>" required>
+    The function that performs the mutation. Receives the variables passed to `mutate`.
+  </ParamField>
+
+  <ParamField path="mutationKey" type="unknown[]">
+    Optional mutation key for identifying and tracking the mutation
+  </ParamField>
+
+  <ParamField path="onMutate" type="(variables: TVariables) => Promise<TOnMutateResult> | TOnMutateResult">
+    This function will fire before the mutation function is fired and receives the same variables the mutation function receives. Useful for optimistic updates.
+  </ParamField>
+
+  <ParamField path="onSuccess" type="(data: TData, variables: TVariables, context: TOnMutateResult) => Promise<unknown> | unknown">
+    This function will fire when the mutation is successful and receives the mutation's result
+  </ParamField>
+
+  <ParamField path="onError" type="(error: TError, variables: TVariables, context: TOnMutateResult | undefined) => Promise<unknown> | unknown">
+    This function will fire if the mutation encounters an error
+  </ParamField>
+
+  <ParamField path="onSettled" type="(data: TData | undefined, error: TError | null, variables: TVariables, context: TOnMutateResult | undefined) => Promise<unknown> | unknown">
+    This function will fire when the mutation is either successful or encounters an error
+  </ParamField>
+
+  <ParamField path="retry" type="boolean | number | (failureCount: number, error: TError) => boolean" default="false">
+    Number of retry attempts or function to determine if a mutation should be retried
+  </ParamField>
+
+  <ParamField path="retryDelay" type="number | (retryAttempt: number, error: TError) => number">
+    Function that receives a retry attempt number and returns the delay to apply before the next attempt
+  </ParamField>
+
+  <ParamField path="networkMode" type="'online' | 'always' | 'offlineFirst'" default="'online'">
+    Controls when the mutation function is allowed to execute
+  </ParamField>
+
+  <ParamField path="throwOnError" type="boolean | (error: TError) => boolean" default="false">
+    Set this to `true` if you want errors to be thrown in the render phase
+  </ParamField>
+
+  <ParamField path="meta" type="Record<string, unknown>">
+    Optional metadata that can be used by mutation observers or plugins
+  </ParamField>
+
+  <ParamField path="gcTime" type="number" default="300000">
+    Time in milliseconds that unused/inactive cache data remains in memory
+  </ParamField>
+</ParamField>
+
+<ParamField path="queryClient" type="QueryClient">
+  Optional QueryClient instance to use. If not provided, the client from the nearest `QueryClientProvider` will be used.
+</ParamField>
+
+## Returns
+
+<ResponseField name="mutate" type="(variables: TVariables, options?: MutateOptions) => void">
+  Function to trigger the mutation. This is a synchronous function that doesn't return a promise.
+  
+  **Variables:**
+  - `variables`: The variables to pass to the mutation function
+  
+  **Options:**
+  - `onSuccess`: Override or extend the mutation's onSuccess callback
+  - `onError`: Override or extend the mutation's onError callback
+  - `onSettled`: Override or extend the mutation's onSettled callback
+</ResponseField>
+
+<ResponseField name="mutateAsync" type="(variables: TVariables, options?: MutateOptions) => Promise<TData>">
+  Async version of `mutate` that returns a promise. Useful when you need to await the result or handle it with promise chains.
+</ResponseField>
+
+<ResponseField name="data" type="TData | undefined">
+  The data returned by the last successful mutation
+</ResponseField>
+
+<ResponseField name="error" type="TError | null">
+  The error object for the mutation, if an error occurred
+</ResponseField>
+
+<ResponseField name="status" type="'idle' | 'pending' | 'error' | 'success'">
+  The status of the mutation:
+  - `idle`: The mutation is currently idle or in a fresh/reset state
+  - `pending`: The mutation is currently running
+  - `error`: The mutation encountered an error
+  - `success`: The mutation was successful
+</ResponseField>
+
+<ResponseField name="isPending" type="boolean">
+  Derived from `status`. Will be `true` if the mutation is currently executing
+</ResponseField>
+
+<ResponseField name="isSuccess" type="boolean">
+  Derived from `status`. Will be `true` if the mutation is in `success` status
+</ResponseField>
+
+<ResponseField name="isError" type="boolean">
+  Derived from `status`. Will be `true` if the mutation is in `error` status
+</ResponseField>
+
+<ResponseField name="isIdle" type="boolean">
+  Derived from `status`. Will be `true` if the mutation is in `idle` status
+</ResponseField>
+
+<ResponseField name="reset" type="() => void">
+  Function to clean the mutation internal state (e.g., data, error, status, etc.)
+</ResponseField>
+
+<ResponseField name="variables" type="TVariables | undefined">
+  The variables passed to the mutation function
+</ResponseField>
+
+<ResponseField name="failureCount" type="number">
+  The failure count for the mutation
+</ResponseField>
+
+<ResponseField name="failureReason" type="TError | null">
+  The failure reason for the mutation retry
+</ResponseField>
+
+<ResponseField name="submittedAt" type="number">
+  Timestamp of when the mutation was submitted
+</ResponseField>
+
+## Examples
+
+### Basic Usage
+
+```tsx
+import { useMutation } from '@tanstack/react-query'
+
+function CreateTodo() {
+  const mutation = useMutation({
+    mutationFn: async (newTodo: { title: string }) => {
+      const response = await fetch('/api/todos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newTodo),
+      })
+      return response.json()
+    },
+  })
+
+  return (
+    <button
+      onClick={() => {
+        mutation.mutate({ title: 'New Todo' })
+      }}
+    >
+      {mutation.isPending ? 'Creating...' : 'Create Todo'}
+    </button>
+  )
+}
+```
+
+### With Type Safety
+
+```tsx
+interface Todo {
+  id: number
+  title: string
+}
+
+interface CreateTodoVariables {
+  title: string
+}
+
+function CreateTodo() {
+  const mutation = useMutation<Todo, Error, CreateTodoVariables>({
+    mutationFn: async (newTodo) => {
+      const response = await fetch('/api/todos', {
+        method: 'POST',
+        body: JSON.stringify(newTodo),
+      })
+      return response.json()
+    },
+  })
+
+  // mutation.data is typed as Todo | undefined
+  // mutation.error is typed as Error | null
+  // mutation.mutate expects CreateTodoVariables
+}
+```
+
+### Optimistic Updates
+
+```tsx
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+
+function UpdateTodo() {
+  const queryClient = useQueryClient()
+
+  const mutation = useMutation({
+    mutationFn: updateTodo,
+    onMutate: async (newTodo) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ['todos'] })
+
+      // Snapshot previous value
+      const previousTodos = queryClient.getQueryData(['todos'])
+
+      // Optimistically update to the new value
+      queryClient.setQueryData(['todos'], (old) => [...old, newTodo])
+
+      // Return context with snapshot
+      return { previousTodos }
+    },
+    onError: (err, newTodo, context) => {
+      // Rollback on error
+      queryClient.setQueryData(['todos'], context.previousTodos)
+    },
+    onSettled: () => {
+      // Refetch after error or success
+      queryClient.invalidateQueries({ queryKey: ['todos'] })
+    },
+  })
+}
+```
+
+### With Async/Await
+
+```tsx
+function CreateTodo() {
+  const mutation = useMutation({
+    mutationFn: createTodo,
+  })
+
+  const handleSubmit = async () => {
+    try {
+      const newTodo = await mutation.mutateAsync({ title: 'New Todo' })
+      console.log('Created todo:', newTodo)
+    } catch (error) {
+      console.error('Error creating todo:', error)
+    }
+  }
+
+  return <button onClick={handleSubmit}>Create</button>
+}
+```
+
+### Invalidating Queries
+
+```tsx
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+
+function CreateTodo() {
+  const queryClient = useQueryClient()
+
+  const mutation = useMutation({
+    mutationFn: createTodo,
+    onSuccess: () => {
+      // Invalidate and refetch
+      queryClient.invalidateQueries({ queryKey: ['todos'] })
+    },
+  })
+}
+```
+
+## Source
+
+Implementation: [useMutation.ts:19](~/workspace/source/packages/react-query/src/useMutation.ts)

@@ -1,0 +1,502 @@
+---
+title: Solid
+description: TanStack Query for Solid - Primitives for managing server state
+---
+
+TanStack Query for Solid provides primitives for fetching, caching, and updating asynchronous data in your SolidJS applications. It leverages Solid's fine-grained reactivity system.
+
+## Installation
+
+```bash
+npm install @tanstack/solid-query
+# or
+pnpm add @tanstack/solid-query
+# or
+yarn add @tanstack/solid-query
+```
+
+## Setup
+
+Wrap your application with `QueryClientProvider`:
+
+```tsx
+import { QueryClient, QueryClientProvider } from '@tanstack/solid-query'
+import { render } from 'solid-js/web'
+import App from './App'
+
+const queryClient = new QueryClient()
+
+render(
+  () => (
+    <QueryClientProvider client={queryClient}>
+      <App />
+    </QueryClientProvider>
+  ),
+  document.getElementById('root')!
+)
+```
+
+## Core Primitives
+
+### useQuery (formerly createQuery)
+
+Fetch and cache data with the `useQuery` primitive:
+
+```tsx
+import { useQuery } from '@tanstack/solid-query'
+import { For, Show } from 'solid-js'
+
+function Todos() {
+  const todosQuery = useQuery(() => ({
+    queryKey: ['todos'],
+    queryFn: async () => {
+      const res = await fetch('/api/todos')
+      return res.json()
+    },
+  }))
+
+  return (
+    <div>
+      <Show when={todosQuery.isLoading}>
+        <div>Loading...</div>
+      </Show>
+      <Show when={todosQuery.error}>
+        <div>Error: {todosQuery.error.message}</div>
+      </Show>
+      <Show when={todosQuery.data}>
+        <ul>
+          <For each={todosQuery.data}>
+            {(todo) => <li>{todo.title}</li>}
+          </For>
+        </ul>
+      </Show>
+    </div>
+  )
+}
+```
+
+<Note>
+The hook was renamed from `createQuery` to `useQuery` in v5. Both names are exported for backward compatibility, but `useQuery` is now preferred.
+</Note>
+
+### Reactive Query Keys
+
+Solid Query works seamlessly with Solid's reactive primitives:
+
+```tsx
+import { createSignal } from 'solid-js'
+import { useQuery } from '@tanstack/solid-query'
+
+function TodoDetail() {
+  const [todoId, setTodoId] = createSignal(1)
+
+  const todoQuery = useQuery(() => ({
+    queryKey: ['todo', todoId()],
+    queryFn: async () => {
+      const res = await fetch(`/api/todos/${todoId()}`)
+      return res.json()
+    },
+  }))
+
+  return (
+    <div>
+      <button onClick={() => setTodoId((id) => id + 1)}>Next Todo</button>
+      <Show when={todoQuery.data}>
+        <h1>{todoQuery.data.title}</h1>
+      </Show>
+    </div>
+  )
+}
+```
+
+<Tip>
+Pass a function to `useQuery` that returns the options object. This allows Solid's reactivity to automatically track dependencies and re-run the query when signals change.
+</Tip>
+
+### useMutation (formerly createMutation)
+
+Perform side effects with mutations:
+
+```tsx
+import { useMutation, useQueryClient } from '@tanstack/solid-query'
+
+function AddTodo() {
+  const queryClient = useQueryClient()
+  
+  const mutation = useMutation(() => ({
+    mutationFn: async (newTodo: { title: string }) => {
+      const res = await fetch('/api/todos', {
+        method: 'POST',
+        body: JSON.stringify(newTodo),
+      })
+      return res.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['todos'] })
+    },
+  }))
+
+  return (
+    <button
+      onClick={() => mutation.mutate({ title: 'New Todo' })}
+      disabled={mutation.isPending}
+    >
+      {mutation.isPending ? 'Adding...' : 'Add Todo'}
+    </button>
+  )
+}
+```
+
+### useInfiniteQuery (formerly createInfiniteQuery)
+
+Implement infinite scrolling:
+
+```tsx
+import { useInfiniteQuery } from '@tanstack/solid-query'
+import { For, Show } from 'solid-js'
+
+function Posts() {
+  const postsQuery = useInfiniteQuery(() => ({
+    queryKey: ['posts'],
+    queryFn: async ({ pageParam = 0 }) => {
+      const res = await fetch(`/api/posts?page=${pageParam}`)
+      return res.json()
+    },
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+    initialPageParam: 0,
+  }))
+
+  return (
+    <div>
+      <For each={postsQuery.data?.pages}>
+        {(page) => (
+          <For each={page.posts}>
+            {(post) => <div>{post.title}</div>}
+          </For>
+        )}
+      </For>
+      <button
+        onClick={() => postsQuery.fetchNextPage()}
+        disabled={!postsQuery.hasNextPage || postsQuery.isFetchingNextPage}
+      >
+        <Show
+          when={postsQuery.isFetchingNextPage}
+          fallback="Load More"
+        >
+          Loading...
+        </Show>
+      </button>
+    </div>
+  )
+}
+```
+
+## Solid's Reactivity System
+
+### Fine-Grained Reactivity
+
+Solid Query leverages Solid's fine-grained reactivity for optimal performance:
+
+```tsx
+import { useQuery } from '@tanstack/solid-query'
+import { createMemo } from 'solid-js'
+
+function TodoList() {
+  const todosQuery = useQuery(() => ({
+    queryKey: ['todos'],
+    queryFn: fetchTodos,
+  }))
+
+  // Only re-runs when the length changes
+  const todoCount = createMemo(() => todosQuery.data?.length ?? 0)
+
+  return (
+    <div>
+      <p>Total: {todoCount()}</p>
+      {/* Only this part re-renders when individual todos change */}
+      <For each={todosQuery.data}>
+        {(todo) => <TodoItem todo={todo} />}
+      </For>
+    </div>
+  )
+}
+```
+
+### Reconciliation
+
+Solid Query includes a `reconcile` option for efficient data updates:
+
+```tsx
+import { useQuery } from '@tanstack/solid-query'
+
+const todosQuery = useQuery(() => ({
+  queryKey: ['todos'],
+  queryFn: fetchTodos,
+  reconcile: 'id', // Use 'id' property for reconciliation
+  // Or use false to disable (default)
+  // Or provide a custom reconciliation function
+}))
+```
+
+<Note>
+The `reconcile` option is Solid-specific and replaces React Query's `structuralSharing`. It provides better performance for Solid's reactivity system.
+</Note>
+
+## Advanced Patterns
+
+### useQueries (formerly createQueries)
+
+Execute multiple queries in parallel:
+
+```tsx
+import { useQueries } from '@tanstack/solid-query'
+import { For } from 'solid-js'
+
+function UserList(props: { userIds: number[] }) {
+  const userQueries = useQueries(() => ({
+    queries: props.userIds.map((id) => ({
+      queryKey: ['user', id],
+      queryFn: () => fetchUser(id),
+    })),
+  }))
+
+  return (
+    <For each={userQueries}>
+      {(query) => (
+        <div>
+          <Show when={query.data}>
+            {query.data.name}
+          </Show>
+        </div>
+      )}
+    </For>
+  )
+}
+```
+
+### Query Options Factory
+
+```tsx
+import { queryOptions, useQuery } from '@tanstack/solid-query'
+
+const todoQueries = {
+  all: () => queryOptions({
+    queryKey: ['todos'],
+    queryFn: fetchTodos,
+  }),
+  detail: (id: number) => queryOptions({
+    queryKey: ['todos', id],
+    queryFn: () => fetchTodo(id),
+  }),
+}
+
+function TodoDetail(props: { id: number }) {
+  const todoQuery = useQuery(() => todoQueries.detail(props.id))
+  return <div>{todoQuery.data?.title}</div>
+}
+```
+
+### useIsFetching
+
+Show a global loading indicator:
+
+```tsx
+import { useIsFetching } from '@tanstack/solid-query'
+import { Show } from 'solid-js'
+
+function GlobalLoadingIndicator() {
+  const isFetching = useIsFetching()
+
+  return (
+    <Show when={isFetching()}>
+      <div class="loading-bar">Loading...</div>
+    </Show>
+  )
+}
+```
+
+### useMutationState
+
+Track all mutations:
+
+```tsx
+import { useMutationState } from '@tanstack/solid-query'
+import { createMemo } from 'solid-js'
+
+function PendingIndicator() {
+  const mutations = useMutationState(() => ({
+    filters: { status: 'pending' },
+  }))
+
+  const pendingCount = createMemo(() => mutations().length)
+
+  return (
+    <Show when={pendingCount() > 0}>
+      <div>Saving {pendingCount()} changes...</div>
+    </Show>
+  )
+}
+```
+
+## TypeScript
+
+Full TypeScript support with type inference:
+
+```tsx
+import { useQuery } from '@tanstack/solid-query'
+import type { Accessor } from 'solid-js'
+
+interface Todo {
+  id: number
+  title: string
+  completed: boolean
+}
+
+function Todos() {
+  const todosQuery = useQuery(() => ({
+    queryKey: ['todos'],
+    queryFn: async (): Promise<Todo[]> => {
+      const res = await fetch('/api/todos')
+      return res.json()
+    },
+  }))
+
+  // todosQuery.data is typed as Accessor<Todo[] | undefined>
+  return <div>{todosQuery.data?.length} todos</div>
+}
+```
+
+## SSR Support
+
+Solid Query works with SolidStart for server-side rendering:
+
+```tsx
+import { QueryClient, QueryClientProvider } from '@tanstack/solid-query'
+import { isServer } from 'solid-js/web'
+
+function createQueryClient() {
+  return new QueryClient({
+    defaultOptions: {
+      queries: {
+        staleTime: isServer ? Infinity : 5000,
+      },
+    },
+  })
+}
+
+export default function Root() {
+  const queryClient = createQueryClient()
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <App />
+    </QueryClientProvider>
+  )
+}
+```
+
+## Migration from v4
+
+The primitive names have changed in v5:
+
+<Tabs>
+  <Tab title="v5 (Current)">
+```tsx
+import { 
+  useQuery,
+  useMutation, 
+  useInfiniteQuery,
+  useQueries,
+} from '@tanstack/solid-query'
+```
+  </Tab>
+  <Tab title="v4 (Legacy)">
+```tsx
+import { 
+  createQuery,
+  createMutation,
+  createInfiniteQuery, 
+  createQueries,
+} from '@tanstack/solid-query'
+```
+  </Tab>
+</Tabs>
+
+<Note>
+Both naming conventions are exported for backward compatibility, but the `use*` prefix is now preferred to align with other frameworks.
+</Note>
+
+## Solid-Specific Features
+
+### No Structural Sharing
+
+Unlike React Query, Solid Query disables structural sharing by default because Solid's reactivity system handles this more efficiently:
+
+```tsx
+// React Query (structural sharing enabled by default)
+const { data } = useQuery({ queryKey: ['todos'], queryFn: fetchTodos })
+
+// Solid Query (use reconcile option instead)
+const todosQuery = useQuery(() => ({
+  queryKey: ['todos'],
+  queryFn: fetchTodos,
+  reconcile: 'id', // Solid-specific optimization
+}))
+```
+
+### Function-Based Options
+
+<Tip>
+Always wrap options in a function `() => ({ ... })` to enable reactivity. This is the key difference from React Query's API.
+</Tip>
+
+```tsx
+// ✅ Correct - Reactive
+const query = useQuery(() => ({
+  queryKey: ['todo', todoId()],
+  queryFn: () => fetchTodo(todoId()),
+}))
+
+// ❌ Wrong - Not reactive
+const query = useQuery({
+  queryKey: ['todo', todoId()],
+  queryFn: () => fetchTodo(todoId()),
+})
+```
+
+## Performance Tips
+
+### Avoid Unnecessary Destructuring
+
+```tsx
+// ❌ Creates new objects on every access
+const { data, isLoading } = useQuery(() => ({ ... }))
+
+// ✅ Better - Access properties directly
+const query = useQuery(() => ({ ... }))
+return <div>{query.data}</div>
+```
+
+### Use Show and For Components
+
+```tsx
+import { Show, For } from 'solid-js'
+
+function Todos() {
+  const query = useQuery(() => ({ queryKey: ['todos'], queryFn: fetchTodos }))
+
+  return (
+    <Show when={query.data} fallback={<div>Loading...</div>}>
+      <For each={query.data}>
+        {(todo) => <TodoItem todo={todo} />}
+      </For>
+    </Show>
+  )
+}
+```
+
+## Related Resources
+
+- [Solid Query Devtools](/guides/devtools)
+- [SolidStart Integration](/guides/ssr)
+- [Solid Reactivity Guide](https://www.solidjs.com/tutorial/introduction_signals)

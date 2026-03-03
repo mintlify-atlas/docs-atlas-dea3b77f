@@ -1,0 +1,393 @@
+---
+title: Optimistic Updates
+description: Implement optimistic UI updates with mutations for instant user feedback
+---
+
+Optimistic updates allow you to update the UI immediately when a user performs an action, before the server responds. This creates a snappy, responsive user experience.
+
+## Basic Pattern
+
+Optimistic updates are implemented using the `onMutate` callback in mutations:
+
+```tsx
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+
+function TodoList() {
+  const queryClient = useQueryClient()
+
+  const addTodoMutation = useMutation({
+    mutationFn: (newTodo: string) => {
+      return fetch('/api/todos', {
+        method: 'POST',
+        body: JSON.stringify({ text: newTodo }),
+      })
+    },
+    
+    // Called before mutation function is fired
+    onMutate: async (newTodo) => {
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ['todos'] })
+
+      // Snapshot the previous value
+      const previousTodos = queryClient.getQueryData(['todos'])
+
+      // Optimistically update to the new value
+      queryClient.setQueryData(['todos'], (old) => {
+        return {
+          ...old,
+          items: [...old.items, { id: Date.now(), text: newTodo }]
+        }
+      })
+
+      // Return context object with the snapshotted value
+      return { previousTodos }
+    },
+    
+    // If mutation fails, use the context returned from onMutate to roll back
+    onError: (err, newTodo, context) => {
+      queryClient.setQueryData(['todos'], context.previousTodos)
+    },
+    
+    // Always refetch after error or success
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['todos'] })
+    },
+  })
+
+  return (
+    <button onClick={() => addTodoMutation.mutate('New Todo')}>
+      Add Todo
+    </button>
+  )
+}
+```
+
+## The Three Callbacks
+
+### onMutate
+
+Runs **before** the mutation function. Use it to:
+1. Cancel outgoing queries
+2. Snapshot current data
+3. Optimistically update the cache
+4. Return context for rollback
+
+```tsx
+onMutate: async (variables) => {
+  // Cancel queries to prevent race conditions
+  await queryClient.cancelQueries({ queryKey: ['todos'] })
+
+  // Get current data
+  const previousTodos = queryClient.getQueryData(['todos'])
+
+  // Optimistically update
+  queryClient.setQueryData(['todos'], (old) => {
+    return { ...old, items: [...old.items, { id: 'temp', ...variables }] }
+  })
+
+  // Return rollback data
+  return { previousTodos }
+}
+```
+
+### onError
+
+Runs if the mutation **fails**. Use the context to rollback:
+
+```tsx
+onError: (error, variables, context) => {
+  // Rollback to previous state
+  if (context?.previousTodos) {
+    queryClient.setQueryData(['todos'], context.previousTodos)
+  }
+  
+  // Show error message
+  toast.error('Failed to add todo')
+}
+```
+
+### onSettled
+
+Runs **after** mutation completes (success or error). Refetch to sync with server:
+
+```tsx
+onSettled: () => {
+  // Invalidate to refetch and sync with server
+  queryClient.invalidateQueries({ queryKey: ['todos'] })
+}
+```
+
+<Tip>
+Always invalidate in `onSettled` rather than `onSuccess` to ensure data is refreshed even after rollbacks.
+</Tip>
+
+## Complete Example: Update Todo
+
+```tsx
+const updateTodoMutation = useMutation({
+  mutationFn: ({ id, text }: { id: number; text: string }) => {
+    return fetch(`/api/todos/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ text }),
+    })
+  },
+  
+  onMutate: async ({ id, text }) => {
+    // Cancel queries
+    await queryClient.cancelQueries({ queryKey: ['todos'] })
+    
+    // Snapshot
+    const previousTodos = queryClient.getQueryData(['todos'])
+    
+    // Optimistic update
+    queryClient.setQueryData(['todos'], (old) => ({
+      ...old,
+      items: old.items.map((todo) =>
+        todo.id === id ? { ...todo, text } : todo
+      ),
+    }))
+    
+    return { previousTodos }
+  },
+  
+  onError: (err, variables, context) => {
+    queryClient.setQueryData(['todos'], context.previousTodos)
+  },
+  
+  onSettled: () => {
+    queryClient.invalidateQueries({ queryKey: ['todos'] })
+  },
+})
+```
+
+## Delete with Optimistic Update
+
+```tsx
+const deleteTodoMutation = useMutation({
+  mutationFn: (id: number) => {
+    return fetch(`/api/todos/${id}`, { method: 'DELETE' })
+  },
+  
+  onMutate: async (id) => {
+    await queryClient.cancelQueries({ queryKey: ['todos'] })
+    
+    const previousTodos = queryClient.getQueryData(['todos'])
+    
+    // Remove from list optimistically
+    queryClient.setQueryData(['todos'], (old) => ({
+      ...old,
+      items: old.items.filter((todo) => todo.id !== id),
+    }))
+    
+    return { previousTodos }
+  },
+  
+  onError: (err, id, context) => {
+    queryClient.setQueryData(['todos'], context.previousTodos)
+  },
+  
+  onSettled: () => {
+    queryClient.invalidateQueries({ queryKey: ['todos'] })
+  },
+})
+```
+
+## Using queryOptions for Type Safety
+
+Get better TypeScript support with `queryOptions`:
+
+```tsx
+import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query'
+
+const todoListOptions = queryOptions({
+  queryKey: ['todos'],
+  queryFn: fetchTodos,
+})
+
+function useTodos() {
+  return useQuery(todoListOptions)
+}
+
+function useAddTodo() {
+  const queryClient = useQueryClient()
+  
+  return useMutation({
+    mutationFn: addTodo,
+    
+    onMutate: async (newTodo, context) => {
+      // Type-safe query key
+      await context.client.cancelQueries(todoListOptions)
+      
+      // Type-safe getQueryData
+      const previousTodos = context.client.getQueryData(
+        todoListOptions.queryKey
+      )
+      
+      // Type-safe setQueryData
+      context.client.setQueryData(todoListOptions.queryKey, (old) => ({
+        ...old,
+        items: [...old.items, { id: Date.now(), text: newTodo }],
+      }))
+      
+      return { previousTodos }
+    },
+    
+    onError: (err, variables, context) => {
+      if (context?.previousTodos) {
+        context.client.setQueryData(
+          todoListOptions.queryKey,
+          context.previousTodos
+        )
+      }
+    },
+    
+    onSettled: (data, error, variables, context) => {
+      context.client.invalidateQueries({ queryKey: ['todos'] })
+    },
+  })
+}
+```
+
+## Updating Multiple Queries
+
+Optimistically update related queries:
+
+```tsx
+const updateTodoMutation = useMutation({
+  mutationFn: updateTodo,
+  
+  onMutate: async ({ id, text }) => {
+    // Update both list and detail queries
+    await queryClient.cancelQueries({ queryKey: ['todos'] })
+    
+    const previousList = queryClient.getQueryData(['todos'])
+    const previousDetail = queryClient.getQueryData(['todos', id])
+    
+    // Update list
+    queryClient.setQueryData(['todos'], (old) => ({
+      ...old,
+      items: old.items.map((t) => t.id === id ? { ...t, text } : t),
+    }))
+    
+    // Update detail
+    queryClient.setQueryData(['todos', id], (old) => ({
+      ...old,
+      text,
+    }))
+    
+    return { previousList, previousDetail }
+  },
+  
+  onError: (err, { id }, context) => {
+    queryClient.setQueryData(['todos'], context.previousList)
+    queryClient.setQueryData(['todos', id], context.previousDetail)
+  },
+  
+  onSettled: (data, error, { id }) => {
+    queryClient.invalidateQueries({ queryKey: ['todos'] })
+    queryClient.invalidateQueries({ queryKey: ['todos', id] })
+  },
+})
+```
+
+## UI Feedback During Mutations
+
+Show optimistic state in the UI:
+
+```tsx
+function TodoItem({ todo }) {
+  const deleteMutation = useDeleteTodo()
+  
+  const isDeleting = deleteMutation.isPending && 
+    deleteMutation.variables === todo.id
+  
+  return (
+    <div style={{ opacity: isDeleting ? 0.5 : 1 }}>
+      <span>{todo.text}</span>
+      <button 
+        onClick={() => deleteMutation.mutate(todo.id)}
+        disabled={isDeleting}
+      >
+        {isDeleting ? 'Deleting...' : 'Delete'}
+      </button>
+    </div>
+  )
+}
+```
+
+## Retry on Error
+
+Show retry UI for failed optimistic updates:
+
+```tsx
+function TodoList() {
+  const addTodoMutation = useMutation({
+    mutationFn: addTodo,
+    onMutate: /* ... optimistic update ... */,
+    onError: /* ... rollback ... */,
+  })
+
+  return (
+    <div>
+      {addTodoMutation.isError && (
+        <div className="error">
+          <p>Failed to add todo: {addTodoMutation.variables}</p>
+          <button onClick={() => addTodoMutation.mutate(addTodoMutation.variables)}>
+            Retry
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+```
+
+## Optimistic Updates with Infinite Queries
+
+Update infinite query pages:
+
+```tsx
+const addCommentMutation = useMutation({
+  mutationFn: addComment,
+  
+  onMutate: async (newComment) => {
+    await queryClient.cancelQueries({ queryKey: ['comments'] })
+    
+    const previousComments = queryClient.getQueryData(['comments'])
+    
+    // Add to first page
+    queryClient.setQueryData(['comments'], (old) => {
+      const firstPage = old.pages[0]
+      return {
+        ...old,
+        pages: [
+          { ...firstPage, data: [newComment, ...firstPage.data] },
+          ...old.pages.slice(1),
+        ],
+      }
+    })
+    
+    return { previousComments }
+  },
+  
+  // ... onError and onSettled
+})
+```
+
+<Warning>
+Always call `cancelQueries` before optimistic updates to prevent race conditions where a slow query overwrites your optimistic update.
+</Warning>
+
+## Best Practices
+
+1. **Always snapshot previous data** in `onMutate` for rollback
+2. **Cancel queries** before optimistic updates to avoid race conditions
+3. **Use onSettled** for invalidation, not `onSuccess` (handles both success and error)
+4. **Show visual feedback** when mutations are pending
+5. **Provide retry mechanisms** for failed updates
+6. **Test error scenarios** thoroughly
+
+## Next Steps
+
+- [Mutations](/concepts/mutations) - Learn more about mutations
+- [Query Invalidation](/concepts/invalidation) - Understand when to refetch

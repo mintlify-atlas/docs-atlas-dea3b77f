@@ -1,0 +1,355 @@
+---
+title: Paginated Queries
+description: Implement traditional pagination with page numbers using keepPreviousData
+---
+
+Paginated queries are ideal for traditional page-based navigation (Page 1, 2, 3, etc.) where users navigate between discrete pages of data.
+
+## Basic Pagination Pattern
+
+```tsx
+import { useQuery, keepPreviousData } from '@tanstack/react-query'
+import { useState } from 'react'
+
+function Projects() {
+  const [page, setPage] = useState(0)
+
+  const { data, isPlaceholderData } = useQuery({
+    queryKey: ['projects', page],
+    queryFn: () => fetchProjects(page),
+    placeholderData: keepPreviousData,
+  })
+
+  return (
+    <div>
+      {data.projects.map((project) => (
+        <p key={project.id}>{project.name}</p>
+      ))}
+      
+      <button 
+        onClick={() => setPage(old => Math.max(old - 1, 0))}
+        disabled={page === 0}
+      >
+        Previous Page
+      </button>
+      
+      <span>Current Page: {page + 1}</span>
+      
+      <button
+        onClick={() => setPage(old => old + 1)}
+        disabled={isPlaceholderData || !data?.hasMore}
+      >
+        Next Page
+      </button>
+    </div>
+  )
+}
+```
+
+## Using keepPreviousData
+
+The `keepPreviousData` option is crucial for good pagination UX. Without it, you'd see a loading state between pages:
+
+```tsx
+// Without keepPreviousData - shows loading state between pages
+const { data, isLoading } = useQuery({
+  queryKey: ['projects', page],
+  queryFn: () => fetchProjects(page),
+})
+// User sees loading spinner when changing pages
+
+// With keepPreviousData - previous data shown while fetching
+const { data, isPlaceholderData } = useQuery({
+  queryKey: ['projects', page],
+  queryFn: () => fetchProjects(page),
+  placeholderData: keepPreviousData,
+})
+// User sees previous page data while new page loads
+```
+
+<Tip>
+`keepPreviousData` keeps the previous query's data until new data arrives, providing a smooth pagination experience without loading states.
+</Tip>
+
+## Understanding isPlaceholderData
+
+When using `keepPreviousData`, use `isPlaceholderData` to know when you're showing old data:
+
+```tsx
+const { data, isPlaceholderData, isFetching } = useQuery({
+  queryKey: ['projects', page],
+  queryFn: () => fetchProjects(page),
+  placeholderData: keepPreviousData,
+})
+
+return (
+  <div>
+    {data.projects.map((project) => (
+      <p 
+        key={project.id}
+        style={{ opacity: isPlaceholderData ? 0.5 : 1 }}
+      >
+        {project.name}
+      </p>
+    ))}
+    
+    {isFetching && <span>Loading...</span>}
+    
+    <button
+      onClick={() => setPage(old => old + 1)}
+      // Disable next button while showing placeholder data
+      disabled={isPlaceholderData || !data?.hasMore}
+    >
+      Next Page
+    </button>
+  </div>
+)
+```
+
+## Prefetching Next Page
+
+Prefetch the next page for instant navigation:
+
+```tsx
+import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query'
+
+function Projects() {
+  const queryClient = useQueryClient()
+  const [page, setPage] = useState(0)
+
+  const { data, isPlaceholderData } = useQuery({
+    queryKey: ['projects', page],
+    queryFn: () => fetchProjects(page),
+    placeholderData: keepPreviousData,
+    staleTime: 5000,
+  })
+
+  // Prefetch the next page
+  useEffect(() => {
+    if (!isPlaceholderData && data?.hasMore) {
+      queryClient.prefetchQuery({
+        queryKey: ['projects', page + 1],
+        queryFn: () => fetchProjects(page + 1),
+      })
+    }
+  }, [data, isPlaceholderData, page, queryClient])
+
+  // ...
+}
+```
+
+<Tip>
+Combining `keepPreviousData` with prefetching provides the best pagination UX: no loading states and instant page transitions.
+</Tip>
+
+## Page-based vs Cursor-based
+
+### Page Numbers (Traditional)
+
+```tsx
+const fetchProjects = async (page: number) => {
+  const response = await fetch(`/api/projects?page=${page}&limit=10`)
+  return response.json()
+}
+
+const { data } = useQuery({
+  queryKey: ['projects', page],
+  queryFn: () => fetchProjects(page),
+  placeholderData: keepPreviousData,
+})
+```
+
+### Offset-based
+
+```tsx
+const ITEMS_PER_PAGE = 10
+
+const fetchProjects = async (offset: number) => {
+  const response = await fetch(
+    `/api/projects?offset=${offset}&limit=${ITEMS_PER_PAGE}`
+  )
+  return response.json()
+}
+
+const { data } = useQuery({
+  queryKey: ['projects', { offset: page * ITEMS_PER_PAGE }],
+  queryFn: () => fetchProjects(page * ITEMS_PER_PAGE),
+  placeholderData: keepPreviousData,
+})
+```
+
+## Handling Total Pages
+
+```tsx
+function Projects() {
+  const [page, setPage] = useState(0)
+  const ITEMS_PER_PAGE = 10
+
+  const { data } = useQuery({
+    queryKey: ['projects', page],
+    queryFn: () => fetchProjects(page),
+    placeholderData: keepPreviousData,
+  })
+
+  // Calculate total pages from API response
+  const totalPages = Math.ceil(data.total / ITEMS_PER_PAGE)
+
+  return (
+    <div>
+      {/* ... render projects ... */}
+      
+      <div>
+        {Array.from({ length: totalPages }, (_, i) => (
+          <button
+            key={i}
+            onClick={() => setPage(i)}
+            disabled={page === i}
+          >
+            {i + 1}
+          </button>
+        ))}
+      </div>
+      
+      <div>Page {page + 1} of {totalPages}</div>
+    </div>
+  )
+}
+```
+
+## Server State Synchronization
+
+Ensure pagination state stays in sync with URL:
+
+```tsx
+import { useSearchParams } from 'react-router-dom'
+
+function Projects() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const page = Number(searchParams.get('page')) || 0
+
+  const { data } = useQuery({
+    queryKey: ['projects', page],
+    queryFn: () => fetchProjects(page),
+    placeholderData: keepPreviousData,
+  })
+
+  const setPage = (newPage: number) => {
+    setSearchParams({ page: String(newPage) })
+  }
+
+  return (
+    <div>
+      {/* ... */}
+      <button onClick={() => setPage(page + 1)}>
+        Next Page
+      </button>
+    </div>
+  )
+}
+```
+
+## Alternative: Custom Placeholder Data
+
+You can also provide custom placeholder data:
+
+```tsx
+const { data } = useQuery({
+  queryKey: ['projects', page],
+  queryFn: () => fetchProjects(page),
+  placeholderData: () => {
+    // Return cached data from a different query
+    return queryClient.getQueryData(['projects', page - 1])
+  },
+})
+```
+
+## Pagination with Filters
+
+Combine pagination with filters in your query key:
+
+```tsx
+function Projects() {
+  const [page, setPage] = useState(0)
+  const [filters, setFilters] = useState({ status: 'active' })
+
+  const { data } = useQuery({
+    queryKey: ['projects', { page, ...filters }],
+    queryFn: () => fetchProjects({ page, ...filters }),
+    placeholderData: keepPreviousData,
+  })
+
+  // Reset to page 0 when filters change
+  const updateFilters = (newFilters) => {
+    setFilters(newFilters)
+    setPage(0)
+  }
+
+  return (
+    <div>
+      <FilterBar filters={filters} onChange={updateFilters} />
+      {/* ... render projects ... */}
+    </div>
+  )
+}
+```
+
+<Warning>
+Remember to reset to page 0 when filters change, otherwise users might land on an empty page.
+</Warning>
+
+## Pagination Component Example
+
+```tsx
+function Pagination({ page, totalPages, onPageChange, isPlaceholderData }) {
+  return (
+    <div className="pagination">
+      <button
+        onClick={() => onPageChange(0)}
+        disabled={page === 0 || isPlaceholderData}
+      >
+        First
+      </button>
+      
+      <button
+        onClick={() => onPageChange(page - 1)}
+        disabled={page === 0 || isPlaceholderData}
+      >
+        Previous
+      </button>
+      
+      <span>Page {page + 1} of {totalPages}</span>
+      
+      <button
+        onClick={() => onPageChange(page + 1)}
+        disabled={page >= totalPages - 1 || isPlaceholderData}
+      >
+        Next
+      </button>
+      
+      <button
+        onClick={() => onPageChange(totalPages - 1)}
+        disabled={page >= totalPages - 1 || isPlaceholderData}
+      >
+        Last
+      </button>
+    </div>
+  )
+}
+```
+
+## Pagination vs Infinite Queries
+
+Choose the right pattern for your use case:
+
+| Feature | Paginated Queries | Infinite Queries |
+|---------|------------------|------------------|
+| UI Pattern | Page numbers, Previous/Next | Load More, Infinite Scroll |
+| Use `keepPreviousData` | Yes | No (built-in) |
+| Data Structure | Single page | Array of pages |
+| Best For | Tables, search results | Feeds, timelines |
+| Navigation | Jump to any page | Sequential only |
+
+## Next Steps
+
+- [Infinite Queries](/guides/infinite-queries) - For infinite scrolling patterns
+- [Prefetching](/guides/prefetching) - Improve perceived performance

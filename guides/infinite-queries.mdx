@@ -1,0 +1,305 @@
+---
+title: Infinite Queries
+description: Implement infinite scrolling and pagination with useInfiniteQuery
+---
+
+Infinite queries are perfect for implementing infinite scrolling, "load more" buttons, and other patterns where you need to fetch data in pages or chunks.
+
+## Basic Usage
+
+Use `useInfiniteQuery` (React) or `createInfiniteQuery` (Solid/Vue) to implement infinite data loading:
+
+```tsx
+import { useInfiniteQuery } from '@tanstack/react-query'
+
+function Projects() {
+  const {
+    data,
+    error,
+    fetchNextPage,
+    fetchPreviousPage,
+    hasNextPage,
+    hasPreviousPage,
+    isFetching,
+    isFetchingNextPage,
+    isFetchingPreviousPage,
+    status,
+  } = useInfiniteQuery({
+    queryKey: ['projects'],
+    queryFn: async ({ pageParam }) => {
+      const response = await fetch(`/api/projects?cursor=${pageParam}`)
+      return await response.json()
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+    getPreviousPageParam: (firstPage) => firstPage.prevCursor,
+  })
+
+  return (
+    <div>
+      {data?.pages.map((page, i) => (
+        <React.Fragment key={i}>
+          {page.data.map((project) => (
+            <p key={project.id}>{project.name}</p>
+          ))}
+        </React.Fragment>
+      ))}
+      <button
+        onClick={() => fetchNextPage()}
+        disabled={!hasNextPage || isFetchingNextPage}
+      >
+        {isFetchingNextPage
+          ? 'Loading more...'
+          : hasNextPage
+            ? 'Load More'
+            : 'Nothing more to load'}
+      </button>
+    </div>
+  )
+}
+```
+
+## Required Options
+
+### initialPageParam
+
+The initial page param to use when fetching the first page:
+
+```ts
+useInfiniteQuery({
+  queryKey: ['projects'],
+  queryFn: fetchProjects,
+  initialPageParam: 0, // Required!
+})
+```
+
+### getNextPageParam
+
+Function that receives the last page and all pages/pageParams, and returns the next page param:
+
+```ts
+getNextPageParam: (lastPage, allPages, lastPageParam, allPageParams) => {
+  // Return undefined when there's no next page
+  return lastPage.nextCursor ?? undefined
+}
+```
+
+<Tip>Return `undefined` when there are no more pages to indicate the end of data.</Tip>
+
+### getPreviousPageParam (Optional)
+
+Function to determine the previous page param for bi-directional infinite queries:
+
+```ts
+getPreviousPageParam: (firstPage, allPages, firstPageParam, allPageParams) => {
+  return firstPage.prevCursor ?? undefined
+}
+```
+
+## Data Structure
+
+The `data` object has a specific structure for infinite queries:
+
+```ts
+interface InfiniteData<TData, TPageParam> {
+  pages: TData[]        // Array of pages
+  pageParams: TPageParam[] // Array of page params used to fetch each page
+}
+```
+
+Example:
+
+```tsx
+{
+  pages: [
+    { data: [...], nextCursor: 2 },
+    { data: [...], nextCursor: 3 },
+    { data: [...], nextCursor: 4 },
+  ],
+  pageParams: [0, 2, 3]
+}
+```
+
+## Fetching Pages
+
+### fetchNextPage
+
+Fetch the next page of data:
+
+```tsx
+const { fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
+  // ... options
+})
+
+<button 
+  onClick={() => fetchNextPage()}
+  disabled={!hasNextPage || isFetchingNextPage}
+>
+  Load More
+</button>
+```
+
+### fetchPreviousPage
+
+Fetch the previous page (for bi-directional scrolling):
+
+```tsx
+const { fetchPreviousPage, hasPreviousPage, isFetchingPreviousPage } = useInfiniteQuery({
+  // ... options
+})
+
+<button 
+  onClick={() => fetchPreviousPage()}
+  disabled={!hasPreviousPage || isFetchingPreviousPage}
+>
+  Load Older
+</button>
+```
+
+## Limiting Pages with maxPages
+
+Limit the number of pages stored in memory to optimize performance:
+
+```tsx
+useInfiniteQuery({
+  queryKey: ['projects'],
+  queryFn: fetchProjects,
+  initialPageParam: 0,
+  getNextPageParam: (lastPage) => lastPage.nextId ?? undefined,
+  getPreviousPageParam: (firstPage) => firstPage.previousId ?? undefined,
+  maxPages: 3, // Only keep 3 pages in memory
+})
+```
+
+<Warning>
+When `maxPages` is set, older pages will be removed from the cache as new pages are fetched. When fetching in the forward direction, the oldest pages are removed first. When fetching backward, the newest pages are removed.
+</Warning>
+
+## Refetching Pages
+
+By default, refetching an infinite query will refetch all pages. You can customize this:
+
+```tsx
+// Refetch only the first page
+queryClient.refetchQueries({
+  queryKey: ['projects'],
+  refetchPage: (page, index) => index === 0,
+})
+```
+
+## Bi-directional Infinite Lists
+
+Example of a chat-like interface with both directions:
+
+```tsx
+function Chat() {
+  const {
+    data,
+    fetchNextPage,
+    fetchPreviousPage,
+    hasNextPage,
+    hasPreviousPage,
+  } = useInfiniteQuery({
+    queryKey: ['messages'],
+    queryFn: async ({ pageParam }) => {
+      const res = await fetch(`/api/messages?cursor=${pageParam}`)
+      return res.json()
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+    getPreviousPageParam: (firstPage) => firstPage.prevCursor,
+  })
+
+  return (
+    <div>
+      <button onClick={() => fetchPreviousPage()} disabled={!hasPreviousPage}>
+        Load Older Messages
+      </button>
+      
+      {data?.pages.map((page) => (
+        page.messages.map((message) => (
+          <Message key={message.id} {...message} />
+        ))
+      ))}
+      
+      <button onClick={() => fetchNextPage()} disabled={!hasNextPage}>
+        Load Newer Messages
+      </button>
+    </div>
+  )
+}
+```
+
+## Status Flags
+
+Infinite queries provide specialized status flags:
+
+- `isFetchingNextPage`: `true` while fetching the next page
+- `isFetchingPreviousPage`: `true` while fetching the previous page
+- `isFetchNextPageError`: `true` if fetching next page failed
+- `isFetchPreviousPageError`: `true` if fetching previous page failed
+- `hasNextPage`: `true` if there is a next page to fetch
+- `hasPreviousPage`: `true` if there is a previous page to fetch
+
+## Cursor vs Offset Pagination
+
+### Cursor-based (Recommended)
+
+```tsx
+useInfiniteQuery({
+  queryKey: ['items'],
+  queryFn: async ({ pageParam }) => {
+    const res = await fetch(`/api/items?cursor=${pageParam}`)
+    return res.json()
+  },
+  initialPageParam: null,
+  getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+})
+```
+
+### Offset-based
+
+```tsx
+useInfiniteQuery({
+  queryKey: ['items'],
+  queryFn: async ({ pageParam }) => {
+    const res = await fetch(`/api/items?offset=${pageParam}&limit=10`)
+    return res.json()
+  },
+  initialPageParam: 0,
+  getNextPageParam: (lastPage, allPages) => {
+    return lastPage.hasMore ? allPages.length * 10 : undefined
+  },
+})
+```
+
+<Tip>
+Cursor-based pagination is generally more reliable for real-time data since it's not affected by insertions/deletions in the dataset.
+</Tip>
+
+## Flattening Pages
+
+If you need a flat array of items instead of pages:
+
+```tsx
+const { data } = useInfiniteQuery({
+  queryKey: ['items'],
+  queryFn: fetchItems,
+  initialPageParam: 0,
+  getNextPageParam: (lastPage) => lastPage.nextCursor,
+  select: (data) => ({
+    pages: [...data.pages],
+    pageParams: [...data.pageParams],
+    // Flatten the pages into a single array
+    flatPages: data.pages.flatMap((page) => page.items),
+  }),
+})
+
+// Use the flattened data
+data?.flatPages.map((item) => <Item key={item.id} {...item} />)
+```
+
+## Next Steps
+
+- [Paginated Queries](/guides/paginated-queries) - For traditional page-based navigation
+- [Prefetching](/guides/prefetching) - Prefetch pages for better UX

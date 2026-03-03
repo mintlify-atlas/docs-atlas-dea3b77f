@@ -1,0 +1,423 @@
+---
+title: createQuery
+description: Svelte function for fetching and caching data
+---
+
+Fetch and cache data with the `createQuery` function. It returns a reactive query result that automatically updates when dependencies change in Svelte 5's runes mode.
+
+## Signature
+
+```ts
+function createQuery<TQueryFnData, TError, TData, TQueryKey>(
+  options: Accessor<CreateQueryOptions<TQueryFnData, TError, TData, TQueryKey>>,
+  queryClient?: Accessor<QueryClient>,
+): CreateQueryResult<TData, TError>
+```
+
+## Parameters
+
+<ParamField path="options" type="Accessor<CreateQueryOptions<TQueryFnData, TError, TData, TQueryKey>>" required>
+  A function (accessor) returning query configuration options.
+  
+  <Expandable title="properties">
+    <ParamField path="queryKey" type="QueryKey" required>
+      Unique identifier for the query. Changes trigger automatic refetch.
+    </ParamField>
+    
+    <ParamField path="queryFn" type="QueryFunction<TQueryFnData, TQueryKey>" required>
+      Function that fetches the data.
+    </ParamField>
+    
+    <ParamField path="enabled" type="boolean">
+      Set to `false` to disable automatic query execution.
+    </ParamField>
+    
+    <ParamField path="staleTime" type="number">
+      Time in milliseconds until cached data is considered stale.
+    </ParamField>
+    
+    <ParamField path="gcTime" type="number">
+      Time in milliseconds before unused data is garbage collected.
+    </ParamField>
+    
+    <ParamField path="refetchInterval" type="number | false">
+      Interval in milliseconds for automatic refetching.
+    </ParamField>
+    
+    <ParamField path="refetchOnWindowFocus" type="boolean">
+      Refetch when window regains focus.
+    </ParamField>
+    
+    <ParamField path="refetchOnReconnect" type="boolean">
+      Refetch when network reconnects.
+    </ParamField>
+    
+    <ParamField path="retry" type="number | boolean">
+      Number of retry attempts or boolean to enable/disable retries.
+    </ParamField>
+    
+    <ParamField path="select" type="(data: TQueryData) => TData">
+      Transform or select a part of the data.
+    </ParamField>
+    
+    <ParamField path="initialData" type="TData | () => TData">
+      Initial data to use before the query executes.
+    </ParamField>
+    
+    <ParamField path="placeholderData" type="TData | () => TData">
+      Placeholder data while the query is loading.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="queryClient" type="Accessor<QueryClient>">
+  Accessor returning a custom QueryClient instance. If not provided, uses the client from context.
+</ParamField>
+
+## Returns
+
+<ResponseField name="CreateQueryResult<TData, TError>" type="object">
+  Reactive query state accessible via Svelte runes.
+  
+  <Expandable title="properties">
+    <ResponseField name="data" type="TData | undefined">
+      The query result data. Returns `undefined` if not yet loaded.
+    </ResponseField>
+    
+    <ResponseField name="error" type="TError | null">
+      The error object if the query failed.
+    </ResponseField>
+    
+    <ResponseField name="isLoading" type="boolean">
+      `true` when fetching for the first time (no cached data).
+    </ResponseField>
+    
+    <ResponseField name="isFetching" type="boolean">
+      `true` whenever the query is fetching (including background refetches).
+    </ResponseField>
+    
+    <ResponseField name="isSuccess" type="boolean">
+      `true` when the query has successfully fetched data.
+    </ResponseField>
+    
+    <ResponseField name="isError" type="boolean">
+      `true` when the query encountered an error.
+    </ResponseField>
+    
+    <ResponseField name="isPending" type="boolean">
+      `true` when the query is pending (no data and no error yet).
+    </ResponseField>
+    
+    <ResponseField name="status" type="'pending' | 'error' | 'success'">
+      The current status of the query.
+    </ResponseField>
+    
+    <ResponseField name="fetchStatus" type="'fetching' | 'paused' | 'idle'">
+      The fetch status of the query.
+    </ResponseField>
+    
+    <ResponseField name="refetch" type="() => Promise<QueryObserverResult>">
+      Manually trigger a refetch of the query.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Type Parameters
+
+- `TQueryFnData` - Type returned by the query function
+- `TError` - Type of error (defaults to `DefaultError`)
+- `TData` - Type of `data` returned (defaults to `TQueryFnData`)
+- `TQueryKey` - Type of the query key (defaults to `QueryKey`)
+
+## Examples
+
+### Basic Usage (Svelte 5 Runes)
+
+```svelte
+<script lang="ts">
+import { createQuery } from '@tanstack/svelte-query'
+
+const query = createQuery(() => ({
+  queryKey: ['todos'],
+  queryFn: async () => {
+    const res = await fetch('/api/todos')
+    return res.json()
+  },
+}))
+</script>
+
+{#if query.isLoading}
+  <div>Loading...</div>
+{:else if query.error}
+  <div>Error: {query.error.message}</div>
+{:else if query.data}
+  <ul>
+    {#each query.data as todo}
+      <li>{todo.title}</li>
+    {/each}
+  </ul>
+{/if}
+```
+
+### Reactive Query Keys
+
+```svelte
+<script lang="ts">
+import { createQuery } from '@tanstack/svelte-query'
+
+let todoId = $state(1)
+
+// Query automatically refetches when todoId changes
+const query = createQuery(() => ({
+  queryKey: ['todo', todoId],
+  queryFn: async () => {
+    const res = await fetch(`/api/todos/${todoId}`)
+    return res.json()
+  },
+}))
+
+function nextTodo() {
+  todoId++
+}
+</script>
+
+<button onclick={nextTodo}>Next Todo</button>
+
+{#if query.data}
+  <h2>{query.data.title}</h2>
+{/if}
+```
+
+### With TypeScript
+
+```svelte
+<script lang="ts">
+import { createQuery } from '@tanstack/svelte-query'
+
+interface Todo {
+  id: number
+  title: string
+  completed: boolean
+}
+
+const query = createQuery(() => ({
+  queryKey: ['todos'],
+  queryFn: async (): Promise<Todo[]> => {
+    const res = await fetch('/api/todos')
+    return res.json()
+  },
+}))
+
+// query.data is typed as Todo[] | undefined
+</script>
+```
+
+### Conditional Fetching
+
+```svelte
+<script lang="ts">
+import { createQuery } from '@tanstack/svelte-query'
+
+let userId = $state<number | null>(null)
+
+const query = createQuery(() => ({
+  queryKey: ['user', userId],
+  queryFn: () => fetchUser(userId!),
+  enabled: userId !== null, // Only fetch when userId is set
+}))
+</script>
+```
+
+### With Select
+
+```svelte
+<script lang="ts">
+import { createQuery } from '@tanstack/svelte-query'
+
+const query = createQuery(() => ({
+  queryKey: ['todos'],
+  queryFn: fetchTodos,
+  select: (todos) => todos.filter(todo => !todo.completed),
+}))
+
+// query.data only contains incomplete todos
+</script>
+```
+
+### Dependent Queries
+
+```svelte
+<script lang="ts">
+import { createQuery } from '@tanstack/svelte-query'
+
+// First query
+const userQuery = createQuery(() => ({
+  queryKey: ['user'],
+  queryFn: fetchUser,
+}))
+
+// Second query depends on first
+const projectsQuery = createQuery(() => ({
+  queryKey: ['projects', userQuery.data?.id],
+  queryFn: () => fetchProjects(userQuery.data!.id),
+  enabled: !!userQuery.data?.id,
+}))
+</script>
+```
+
+### Initial Data
+
+```svelte
+<script lang="ts">
+import { createQuery } from '@tanstack/svelte-query'
+
+interface Props {
+  todoId: number
+  initialTodo?: Todo
+}
+
+let { todoId, initialTodo }: Props = $props()
+
+const query = createQuery(() => ({
+  queryKey: ['todo', todoId],
+  queryFn: () => fetchTodo(todoId),
+  initialData: initialTodo,
+}))
+</script>
+```
+
+### Polling/Refetch Interval
+
+```svelte
+<script lang="ts">
+import { createQuery } from '@tanstack/svelte-query'
+
+const query = createQuery(() => ({
+  queryKey: ['realtime-data'],
+  queryFn: fetchRealtimeData,
+  refetchInterval: 5000, // Refetch every 5 seconds
+}))
+</script>
+```
+
+### Manual Refetch
+
+```svelte
+<script lang="ts">
+import { createQuery } from '@tanstack/svelte-query'
+
+const query = createQuery(() => ({
+  queryKey: ['data'],
+  queryFn: fetchData,
+}))
+
+function refresh() {
+  query.refetch()
+}
+</script>
+
+<button onclick={refresh}>Refresh Data</button>
+
+{#if query.data}
+  <pre>{JSON.stringify(query.data, null, 2)}</pre>
+{/if}
+```
+
+### Error Handling
+
+```svelte
+<script lang="ts">
+import { createQuery } from '@tanstack/svelte-query'
+
+const query = createQuery(() => ({
+  queryKey: ['data'],
+  queryFn: fetchData,
+  retry: 3,
+  retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+}))
+</script>
+
+{#if query.isError}
+  <div>
+    <p>Error: {query.error?.message}</p>
+    <button onclick={() => query.refetch()}>Try Again</button>
+  </div>
+{:else}
+  <!-- Success content -->
+{/if}
+```
+
+### Multiple Reactive Dependencies
+
+```svelte
+<script lang="ts">
+import { createQuery } from '@tanstack/svelte-query'
+
+let filter = $state('all')
+let page = $state(1)
+
+// Query refetches when either filter or page changes
+const query = createQuery(() => ({
+  queryKey: ['todos', filter, page],
+  queryFn: async () => {
+    const res = await fetch(`/api/todos?filter=${filter}&page=${page}`)
+    return res.json()
+  },
+}))
+</script>
+
+<select bind:value={filter}>
+  <option value="all">All</option>
+  <option value="active">Active</option>
+  <option value="completed">Completed</option>
+</select>
+
+<button onclick={() => page--} disabled={page === 1}>Previous</button>
+<button onclick={() => page++}>Next</button>
+```
+
+### With Loading States
+
+```svelte
+<script lang="ts">
+import { createQuery } from '@tanstack/svelte-query'
+
+const query = createQuery(() => ({
+  queryKey: ['todos'],
+  queryFn: fetchTodos,
+}))
+</script>
+
+{#if query.isLoading}
+  <div class="spinner">Loading...</div>
+{:else if query.isError}
+  <div class="error">
+    <h3>Error occurred</h3>
+    <p>{query.error.message}</p>
+  </div>
+{:else if query.isSuccess}
+  <div class="success">
+    <!-- Render data -->
+  </div>
+{/if}
+```
+
+## Notes
+
+<Note>
+Svelte Query uses Svelte 5's runes mode. The options parameter must be an accessor (function) to track reactive dependencies.
+</Note>
+
+<Tip>
+Access query state properties directly (e.g., `query.data`, `query.isLoading`) without needing to use `$state` or stores.
+</Tip>
+
+<Warning>
+Make sure to use Svelte 5 with runes mode enabled. Svelte Query v5+ requires Svelte 5.
+</Warning>
+
+## Related
+
+- [createInfiniteQuery](/api/svelte/create-infinite-query) - For paginated/infinite data
+- [createMutation](/api/svelte/create-mutation) - For mutations/side effects
+- [Svelte Guide](/frameworks/svelte) - Complete guide to Svelte Query

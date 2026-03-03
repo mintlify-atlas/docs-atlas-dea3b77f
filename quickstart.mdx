@@ -1,80 +1,271 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quick Start
+description: Get started with TanStack Query in minutes by building your first query.
 ---
 
-## Get started in three steps
+# Quick Start
 
-Get your documentation site running locally and make your first customization.
+This guide walks you through building your first application with TanStack Query. We'll use React in this example, but the concepts apply to all supported frameworks.
 
-### Step 1: Set up your local environment
+## Prerequisites
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
+Before you begin, make sure you have:
+
+- Node.js installed (version 16 or higher recommended)
+- A React application set up (using Vite, Create React App, or Next.js)
+- TanStack Query installed (see [Installation](/installation))
+
+## Setup
+
+<Steps>
+  <Step title="Create a QueryClient">
+    The `QueryClient` manages your queries and cache. Create one at the root of your application:
+
+    ```tsx
+    import { QueryClient } from '@tanstack/react-query'
+
+    const queryClient = new QueryClient()
+    ```
+
+    <Tip>
+      You can configure default options for all queries when creating the client:
+
+      ```tsx
+      const queryClient = new QueryClient({
+        defaultOptions: {
+          queries: {
+            staleTime: 1000 * 60 * 5, // 5 minutes
+            gcTime: 1000 * 60 * 60 * 24, // 24 hours
+          },
+        },
+      })
+      ```
+    </Tip>
+  </Step>
+
+  <Step title="Wrap your app with QueryClientProvider">
+    The `QueryClientProvider` makes the QueryClient available to your entire component tree:
+
+    ```tsx
+    import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+
+    const queryClient = new QueryClient()
+
+    function App() {
+      return (
+        <QueryClientProvider client={queryClient}>
+          {/* Your app components */}
+          <Example />
+        </QueryClientProvider>
+      )
+    }
+    ```
+  </Step>
+
+  <Step title="Create your first query">
+    Use the `useQuery` hook to fetch and cache data. You need:
     
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+    - A unique `queryKey` to identify the query
+    - A `queryFn` that returns a promise
 
-### Step 2: Deploy your changes
+    ```tsx
+    import { useQuery } from '@tanstack/react-query'
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+    function Example() {
+      const { data, isPending, error } = useQuery({
+        queryKey: ['repoData'],
+        queryFn: async () => {
+          const response = await fetch(
+            'https://api.github.com/repos/TanStack/query'
+          )
+          if (!response.ok) {
+            throw new Error('Network response was not ok')
+          }
+          return response.json()
+        },
+      })
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+      if (isPending) return <div>Loading...</div>
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+      if (error) return <div>An error occurred: {error.message}</div>
 
-### Step 3: Go live
+      return (
+        <div>
+          <h1>{data.full_name}</h1>
+          <p>{data.description}</p>
+          <div>
+            <strong>⭐ {data.stargazers_count}</strong>
+            <strong> 🍴 {data.forks_count}</strong>
+            <strong> 👀 {data.subscribers_count}</strong>
+          </div>
+        </div>
+      )
+    }
+    ```
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+    <Note>
+      TanStack Query automatically handles:
+      - Caching the response
+      - Deduplicating identical requests
+      - Refetching when the window regains focus
+      - Retrying failed requests
+      - Updating loading and error states
+    </Note>
+  </Step>
 
-## Next steps
+  <Step title="Add DevTools (Optional)">
+    The DevTools help you visualize and debug your queries during development:
 
-Now that you have your docs running, explore these key features:
+    ```tsx
+    import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+    import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 
-<CardGroup cols={2}>
+    const queryClient = new QueryClient()
 
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
+    function App() {
+      return (
+        <QueryClientProvider client={queryClient}>
+          <Example />
+          <ReactQueryDevtools initialIsOpen={false} />
+        </QueryClientProvider>
+      )
+    }
+    ```
 
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
+    <Tip>
+      The DevTools are automatically excluded from production builds, so you can safely leave them in your code.
+    </Tip>
+  </Step>
+</Steps>
 
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
+## Complete Example
 
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
+Here's the complete working example:
 
-</CardGroup>
+```tsx
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import {
+  QueryClient,
+  QueryClientProvider,
+  useQuery,
+} from '@tanstack/react-query'
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
+
+const queryClient = new QueryClient()
+
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <ReactQueryDevtools />
+      <Example />
+    </QueryClientProvider>
+  )
+}
+
+function Example() {
+  const { isPending, error, data, isFetching } = useQuery({
+    queryKey: ['repoData'],
+    queryFn: async () => {
+      const response = await fetch(
+        'https://api.github.com/repos/TanStack/query'
+      )
+      return response.json()
+    },
+  })
+
+  if (isPending) return 'Loading...'
+
+  if (error) return 'An error has occurred: ' + error.message
+
+  return (
+    <div>
+      <h1>{data.full_name}</h1>
+      <p>{data.description}</p>
+      <strong>👀 {data.subscribers_count}</strong>{' '}
+      <strong>✨ {data.stargazers_count}</strong>{' '}
+      <strong>🍴 {data.forks_count}</strong>
+      <div>{isFetching ? 'Updating...' : ''}</div>
+    </div>
+  )
+}
+
+const rootElement = document.getElementById('root') as HTMLElement
+ReactDOM.createRoot(rootElement).render(<App />)
+```
+
+## Understanding the Query Result
+
+The `useQuery` hook returns an object with several useful properties:
+
+- **`data`** - The successfully fetched data (undefined until the query succeeds)
+- **`error`** - The error object if the query failed (null if successful)
+- **`isPending`** - `true` if the query is currently fetching for the first time
+- **`isError`** - `true` if the query encountered an error
+- **`isSuccess`** - `true` if the query was successful
+- **`isFetching`** - `true` whenever the query is fetching (including background refetches)
+- **`refetch`** - A function to manually trigger a refetch
+
+## Query Keys
+
+Query keys uniquely identify your queries. They can be:
+
+```tsx
+// Simple string key
+useQuery({ queryKey: ['todos'], ... })
+
+// Array with multiple values
+useQuery({ queryKey: ['todo', todoId], ... })
+
+// Complex nested structure
+useQuery({ queryKey: ['todos', { status: 'active', page: 1 }], ... })
+```
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+  When any value in the query key changes, TanStack Query automatically refetches the data. This makes dependent queries trivial to implement.
 </Note>
+
+## What Happens Automatically?
+
+With zero configuration, TanStack Query:
+
+1. **Caches** your data in memory
+2. **Deduplicates** identical requests that happen simultaneously
+3. **Refetches** data when the window regains focus
+4. **Refetches** data when the network reconnects
+5. **Retries** failed requests with exponential backoff
+6. **Marks data as stale** after a configurable time period
+7. **Garbage collects** unused cache data
+
+## Next Steps
+
+Now that you've built your first query, explore more advanced features:
+
+<CardGroup cols={2}>
+  <Card title="Query Options" icon="sliders" href="/query-options">
+    Configure caching, refetching, and retry behavior
+  </Card>
+  
+  <Card title="Mutations" icon="pen" href="/mutations">
+    Learn how to create, update, and delete data
+  </Card>
+  
+  <Card title="Query Invalidation" icon="refresh" href="/invalidation">
+    Keep your data fresh after mutations
+  </Card>
+  
+  <Card title="Pagination" icon="list" href="/pagination">
+    Implement paginated and infinite scroll queries
+  </Card>
+</CardGroup>
+
+## Framework-Specific Examples
+
+While this guide uses React, the concepts are identical across frameworks. The main differences are:
+
+- **Vue**: Use `useQuery` from `@tanstack/vue-query` with Vue's Composition API
+- **Solid**: Use `createQuery` from `@tanstack/solid-query` as a primitive
+- **Svelte**: Use `createQuery` from `@tanstack/svelte-query` with Svelte's reactive syntax
+- **Angular**: Use `injectQuery` from `@tanstack/angular-query-experimental` with Signals
+
+Check the framework-specific documentation for detailed examples.

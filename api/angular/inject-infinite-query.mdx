@@ -1,0 +1,307 @@
+---
+title: injectInfiniteQuery
+description: API reference for the injectInfiniteQuery function
+---
+
+## injectInfiniteQuery
+
+Injects an infinite query: a declarative dependency on an asynchronous source of data that is tied to a unique key. Infinite queries can additively "load more" data onto an existing set of data or "infinite scroll".
+
+```typescript
+import { injectInfiniteQuery } from '@tanstack/angular-query-experimental'
+```
+
+### Signature
+
+```typescript
+function injectInfiniteQuery<
+  TQueryFnData,
+  TError = DefaultError,
+  TData = InfiniteData<TQueryFnData>,
+  TQueryKey extends QueryKey = QueryKey,
+  TPageParam = unknown,
+>(
+  injectInfiniteQueryFn: () => CreateInfiniteQueryOptions<
+    TQueryFnData,
+    TError,
+    TData,
+    TQueryKey,
+    TPageParam
+  >,
+  options?: InjectInfiniteQueryOptions,
+): CreateInfiniteQueryResult<TData, TError>
+```
+
+### Parameters
+
+<ParamField path="injectInfiniteQueryFn" type="() => CreateInfiniteQueryOptions" required>
+  A function that returns infinite query options. The function is run in a reactive context, similar to Angular's `computed`. This allows signals to be inserted into the options, making the query reactive.
+
+  **CreateInfiniteQueryOptions properties:**
+  - `queryKey` - A unique key for the query
+  - `queryFn` - The function that the query will use to fetch data. Receives a `pageParam` in the context
+  - `initialPageParam` - The default page parameter to use for the first page
+  - `getNextPageParam` - Function to get the next page parameter from the last page's data
+  - `getPreviousPageParam` - Function to get the previous page parameter from the first page's data
+  - `enabled` - Whether the query should run automatically
+  - `staleTime` - Time in milliseconds before data is considered stale
+  - `gcTime` - Time in milliseconds before inactive queries are garbage collected
+  - And other standard query options
+</ParamField>
+
+<ParamField path="options" type="InjectInfiniteQueryOptions">
+  Additional configuration for the infinite query injection.
+
+  <Expandable title="properties">
+    <ParamField path="injector" type="Injector">
+      The Angular `Injector` in which to create the infinite query. If not provided, the current injection context will be used instead (via `inject`).
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+### Returns
+
+<ResponseField name="CreateInfiniteQueryResult" type="object">
+  A signal-based infinite query result object with the following properties:
+
+  **Properties:**
+  - `data` - Object containing all pages and page parameters:
+    - `pages` - Array of all fetched pages
+    - `pageParams` - Array of all page parameters
+  - `error` - The error object if the query failed
+  - `status` - The status of the query (pending, error, success)
+  - `isPending` - Boolean indicating if the query is in pending state
+  - `isError` - Boolean indicating if the query failed
+  - `isSuccess` - Boolean indicating if the query succeeded
+  - `hasNextPage` - Boolean indicating if there is a next page to fetch
+  - `hasPreviousPage` - Boolean indicating if there is a previous page to fetch
+  - `isFetchingNextPage` - Boolean indicating if the next page is currently being fetched
+  - `isFetchingPreviousPage` - Boolean indicating if the previous page is currently being fetched
+
+  **Methods:**
+  - `fetchNextPage()` - Function to fetch the next page
+  - `fetchPreviousPage()` - Function to fetch the previous page
+  - `refetch()` - Function to manually refetch all pages
+  - And other standard query result properties
+</ResponseField>
+
+### Usage
+
+#### Basic example
+
+```typescript
+import { injectInfiniteQuery } from '@tanstack/angular-query-experimental'
+import { HttpClient } from '@angular/common/http'
+import { inject } from '@angular/core'
+
+interface Page {
+  data: Item[]
+  nextCursor: number | null
+}
+
+class ServiceOrComponent {
+  #http = inject(HttpClient)
+
+  query = injectInfiniteQuery(() => ({
+    queryKey: ['items'],
+    queryFn: ({ pageParam }) =>
+      this.#http.get<Page>(`/api/items?cursor=${pageParam}`),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+    getPreviousPageParam: (firstPage) => firstPage.prevCursor,
+  }))
+
+  loadMore() {
+    if (this.query.hasNextPage()) {
+      this.query.fetchNextPage()
+    }
+  }
+}
+```
+
+#### Reactive example with signals
+
+```typescript
+import { injectInfiniteQuery } from '@tanstack/angular-query-experimental'
+import { signal } from '@angular/core'
+
+class ServiceOrComponent {
+  filter = signal('')
+  limit = signal(10)
+
+  query = injectInfiniteQuery(() => ({
+    queryKey: ['items', this.filter()],
+    queryFn: ({ pageParam }) =>
+      fetchItems({
+        cursor: pageParam,
+        filter: this.filter(),
+        limit: this.limit(),
+      }),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+    // Signals can be combined with expressions
+    enabled: !!this.filter(),
+  }))
+}
+```
+
+#### Bi-directional infinite scroll
+
+```typescript
+import { injectInfiniteQuery } from '@tanstack/angular-query-experimental'
+
+class ServiceOrComponent {
+  query = injectInfiniteQuery(() => ({
+    queryKey: ['messages'],
+    queryFn: ({ pageParam }) => fetchMessages({ cursor: pageParam }),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+    getPreviousPageParam: (firstPage) => firstPage.prevCursor,
+  }))
+
+  loadNewer() {
+    if (this.query.hasNextPage()) {
+      this.query.fetchNextPage()
+    }
+  }
+
+  loadOlder() {
+    if (this.query.hasPreviousPage()) {
+      this.query.fetchPreviousPage()
+    }
+  }
+}
+```
+
+#### Accessing all pages data
+
+```typescript
+import { injectInfiniteQuery } from '@tanstack/angular-query-experimental'
+import { computed } from '@angular/core'
+
+class ServiceOrComponent {
+  query = injectInfiniteQuery(() => ({
+    queryKey: ['items'],
+    queryFn: ({ pageParam }) => fetchItems(pageParam),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+  }))
+
+  // Flatten all pages into a single array
+  allItems = computed(() => {
+    return this.query.data()?.pages.flatMap((page) => page.data) ?? []
+  })
+}
+```
+
+#### Using with custom injector
+
+```typescript
+import { injectInfiniteQuery } from '@tanstack/angular-query-experimental'
+import { Injector } from '@angular/core'
+
+class ServiceOrComponent {
+  constructor(private injector: Injector) {
+    const query = injectInfiniteQuery(
+      () => ({
+        queryKey: ['data'],
+        queryFn: ({ pageParam }) => fetchData(pageParam),
+        initialPageParam: 0,
+        getNextPageParam: (lastPage) => lastPage.nextCursor,
+      }),
+      { injector: this.injector }
+    )
+  }
+}
+```
+
+#### Offset-based pagination
+
+```typescript
+import { injectInfiniteQuery } from '@tanstack/angular-query-experimental'
+
+class ServiceOrComponent {
+  query = injectInfiniteQuery(() => ({
+    queryKey: ['items'],
+    queryFn: ({ pageParam }) =>
+      fetchItems({ offset: pageParam, limit: 10 }),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) => {
+      // If the last page has fewer items than the limit, there are no more pages
+      return lastPage.data.length === 10
+        ? allPages.length * 10
+        : undefined
+    },
+  }))
+}
+```
+
+### Type Overloads
+
+#### With defined initial data
+
+```typescript
+function injectInfiniteQuery<
+  TQueryFnData,
+  TError = DefaultError,
+  TData = InfiniteData<TQueryFnData>,
+  TQueryKey extends QueryKey = QueryKey,
+  TPageParam = unknown,
+>(
+  injectInfiniteQueryFn: () => DefinedInitialDataInfiniteOptions<
+    TQueryFnData,
+    TError,
+    TData,
+    TQueryKey,
+    TPageParam
+  >,
+  options?: InjectInfiniteQueryOptions,
+): DefinedCreateInfiniteQueryResult<TData, TError>
+```
+
+When `initialData` is provided and defined, the query result is guaranteed to have data available immediately.
+
+#### With undefined initial data
+
+```typescript
+function injectInfiniteQuery<
+  TQueryFnData,
+  TError = DefaultError,
+  TData = InfiniteData<TQueryFnData>,
+  TQueryKey extends QueryKey = QueryKey,
+  TPageParam = unknown,
+>(
+  injectInfiniteQueryFn: () => UndefinedInitialDataInfiniteOptions<
+    TQueryFnData,
+    TError,
+    TData,
+    TQueryKey,
+    TPageParam
+  >,
+  options?: InjectInfiniteQueryOptions,
+): CreateInfiniteQueryResult<TData, TError>
+```
+
+When `initialData` is not provided or is undefined, the query result data may be undefined initially.
+
+### Implementation Details
+
+- Uses `InfiniteQueryObserver` internally to manage infinite query state
+- Runs in the provided or current injection context
+- The query function is reactive and will re-run when any signals used inside it change
+- The query is automatically managed and cleaned up when the component/service is destroyed
+
+### Notes
+
+- Must be called within an injection context (constructor, field initializer, or factory function) unless the `injector` option is provided
+- The `queryFn` receives a `pageParam` property in its context object
+- You must provide `initialPageParam`, `getNextPageParam`, and optionally `getPreviousPageParam`
+- The `data` object has a specific structure with `pages` and `pageParams` arrays
+- Each call to `fetchNextPage` or `fetchPreviousPage` appends to the pages array
+- The query is automatically managed and cleaned up when the component/service is destroyed
+
+### See Also
+
+- [Infinite Queries Guide](https://tanstack.com/query/latest/docs/framework/angular/guides/infinite-queries)
+- [injectQuery](/api/angular/inject-query)
+- [injectMutation](/api/angular/inject-mutation)

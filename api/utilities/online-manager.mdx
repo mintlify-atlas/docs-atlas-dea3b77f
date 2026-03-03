@@ -1,0 +1,297 @@
+---
+title: OnlineManager
+description: API reference for the OnlineManager utility
+---
+
+## OnlineManager
+
+Manages online/offline network state and notifies subscribers when the network state changes. This is used by TanStack Query to automatically pause and resume queries based on network availability.
+
+```typescript
+import { onlineManager } from '@tanstack/query-core'
+```
+
+### Instance
+
+A singleton instance is exported as `onlineManager`:
+
+```typescript
+export const onlineManager = new OnlineManager()
+```
+
+### Methods
+
+#### setEventListener
+
+Sets up a custom event listener for online/offline events.
+
+```typescript
+setEventListener(setup: SetupFn): void
+```
+
+<ParamField path="setup" type="SetupFn" required>
+  A function that sets up online/offline event listeners. The setup function receives a `setOnline` callback and should return a cleanup function.
+
+  **Type definition:**
+  ```typescript
+  type SetupFn = (setOnline: (online: boolean) => void) => (() => void) | undefined
+  ```
+
+  **Parameters:**
+  - `setOnline` - Callback to notify the manager of network state changes. Call with `true` when online, `false` when offline.
+
+  **Returns:**
+  - A cleanup function that will be called when the event listener is removed or replaced
+</ParamField>
+
+**Usage:**
+
+```typescript
+import { onlineManager } from '@tanstack/query-core'
+import NetInfo from '@react-native-community/netinfo'
+
+// Custom network detection for React Native
+onlineManager.setEventListener((setOnline) => {
+  const unsubscribe = NetInfo.addEventListener((state) => {
+    setOnline(!!state.isConnected)
+  })
+
+  return () => {
+    unsubscribe()
+  }
+})
+```
+
+**Default behavior:**
+
+By default, the OnlineManager listens to `online` and `offline` events on the window:
+
+```typescript
+const onlineListener = () => setOnline(true)
+const offlineListener = () => setOnline(false)
+
+window.addEventListener('online', onlineListener, false)
+window.addEventListener('offline', offlineListener, false)
+
+return () => {
+  window.removeEventListener('online', onlineListener)
+  window.removeEventListener('offline', offlineListener)
+}
+```
+
+#### setOnline
+
+Manually sets the online state.
+
+```typescript
+setOnline(online: boolean): void
+```
+
+<ParamField path="online" type="boolean" required>
+  The new online state. `true` indicates the network is available, `false` indicates offline.
+</ParamField>
+
+**Usage:**
+
+```typescript
+import { onlineManager } from '@tanstack/query-core'
+
+// Manually set online state
+onlineManager.setOnline(false) // Simulate offline
+
+// Later: go back online
+onlineManager.setOnline(true)
+```
+
+**Behavior:**
+- Only notifies listeners if the online state has actually changed
+- All subscribed listeners are notified of the new state
+- This is automatically called by the event listener setup function
+
+#### subscribe
+
+Subscribes to online/offline state changes.
+
+```typescript
+subscribe(listener: Listener): () => void
+```
+
+<ParamField path="listener" type="(online: boolean) => void" required>
+  A callback function that will be called whenever the online state changes. The callback receives a boolean indicating whether the network is currently online.
+</ParamField>
+
+**Returns:**
+
+An unsubscribe function that removes the listener when called.
+
+**Usage:**
+
+```typescript
+import { onlineManager } from '@tanstack/query-core'
+
+// Subscribe to online/offline changes
+const unsubscribe = onlineManager.subscribe((isOnline) => {
+  if (isOnline) {
+    console.log('Network is online - resuming queries')
+  } else {
+    console.log('Network is offline - pausing queries')
+  }
+})
+
+// Later: unsubscribe
+unsubscribe()
+```
+
+**Behavior:**
+- Automatically sets up the event listener on the first subscription
+- Cleans up the event listener when the last subscriber unsubscribes
+- Multiple listeners can be added simultaneously
+- Each listener is called with the current online state when it changes
+
+#### isOnline
+
+Returns the current online state.
+
+```typescript
+isOnline(): boolean
+```
+
+**Returns:**
+
+`true` if the network is currently online, `false` otherwise.
+
+**Usage:**
+
+```typescript
+import { onlineManager } from '@tanstack/query-core'
+
+if (onlineManager.isOnline()) {
+  console.log('Network is available')
+  // Proceed with network request
+} else {
+  console.log('Network is offline')
+  // Show offline message
+}
+```
+
+**Behavior:**
+- Returns the current internal online state
+- Defaults to `true` (online) when the OnlineManager is first created
+- Can be manually updated via `setOnline()` or automatically via event listeners
+
+### Complete Example
+
+```typescript
+import { onlineManager } from '@tanstack/query-core'
+
+// Subscribe to network state changes
+const unsubscribe = onlineManager.subscribe((isOnline) => {
+  if (isOnline) {
+    console.log('Back online - syncing data')
+    syncPendingChanges()
+  } else {
+    console.log('Gone offline - enabling offline mode')
+    enableOfflineMode()
+  }
+})
+
+// Check current network state
+if (!onlineManager.isOnline()) {
+  showOfflineIndicator()
+}
+
+// Manually trigger an offline state (useful for testing)
+onlineManager.setOnline(false)
+
+// Custom network detection for React Native
+onlineManager.setEventListener((setOnline) => {
+  const unsubscribe = NetInfo.addEventListener((state) => {
+    setOnline(state.isConnected && state.isInternetReachable)
+  })
+
+  return unsubscribe
+})
+
+// Clean up when done
+unsubscribe()
+```
+
+### Testing Example
+
+```typescript
+import { onlineManager } from '@tanstack/query-core'
+import { renderHook } from '@testing-library/react'
+import { useQuery } from '@tanstack/react-query'
+
+test('queries pause when offline', async () => {
+  // Mock offline state
+  onlineManager.setOnline(false)
+
+  const { result } = renderHook(() =>
+    useQuery({
+      queryKey: ['data'],
+      queryFn: fetchData,
+    })
+  )
+
+  // Query should be paused
+  expect(result.current.isPaused).toBe(true)
+
+  // Go back online
+  onlineManager.setOnline(true)
+
+  // Query should resume
+  await waitFor(() => expect(result.current.isSuccess).toBe(true))
+})
+```
+
+### Integration with TanStack Query
+
+The OnlineManager is used internally by TanStack Query to implement network-aware query behavior:
+
+```typescript
+import { useQuery } from '@tanstack/react-query'
+
+const query = useQuery({
+  queryKey: ['data'],
+  queryFn: fetchData,
+  // Retry when going back online (default: true)
+  refetchOnReconnect: true,
+  // Pause queries when offline (default: true for queries, false for mutations)
+  networkMode: 'online',
+})
+```
+
+### Network Modes
+
+TanStack Query uses the OnlineManager to support different network modes:
+
+- **`online`** - Queries/mutations pause when offline
+- **`always`** - Queries/mutations run regardless of online state
+- **`offlineFirst`** - Queries/mutations run, but failures are retried when back online
+
+### Platform Support
+
+- **Browser:** Uses `online` and `offline` events by default
+- **React Native:** Requires custom setup with `NetInfo` or similar
+- **Node.js:** Always returns `true` by default (no network detection)
+
+### Type Definitions
+
+```typescript
+type Listener = (online: boolean) => void
+
+type SetupFn = (setOnline: (online: boolean) => void) => (() => void) | undefined
+
+class OnlineManager extends Subscribable<Listener> {
+  setEventListener(setup: SetupFn): void
+  setOnline(online: boolean): void
+  subscribe(listener: Listener): () => void
+  isOnline(): boolean
+}
+```
+
+### See Also
+
+- [FocusManager](/api/utilities/focus-manager) - Similar manager for window focus state
+- [Network Mode](https://tanstack.com/query/latest/docs/framework/react/guides/network-mode)

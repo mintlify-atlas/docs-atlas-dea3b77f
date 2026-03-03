@@ -1,0 +1,270 @@
+---
+title: useQuery
+description: Vue composable for fetching and caching data
+---
+
+Fetch and cache data with the `useQuery` composable. It returns a reactive query result that automatically updates when dependencies change.
+
+## Signature
+
+```ts
+function useQuery<TQueryFnData, TError, TData, TQueryKey>(
+  options: UseQueryOptions<TQueryFnData, TError, TData, TQueryKey>,
+  queryClient?: QueryClient,
+): UseQueryReturnType<TData, TError>
+```
+
+## Parameters
+
+<ParamField path="options" type="UseQueryOptions<TQueryFnData, TError, TData, TQueryKey>" required>
+  Configuration options for the query. Can be a reactive ref or getter function.
+  
+  <Expandable title="properties">
+    <ParamField path="queryKey" type="MaybeRefDeep<QueryKey>" required>
+      Unique identifier for the query. Can be a ref or contain refs.
+    </ParamField>
+    
+    <ParamField path="queryFn" type="MaybeRefDeep<QueryFunction>" required>
+      Function that fetches the data. Can be a ref.
+    </ParamField>
+    
+    <ParamField path="enabled" type="MaybeRefOrGetter<boolean>">
+      Set to `false` to disable automatic query execution. Supports refs and getters.
+    </ParamField>
+    
+    <ParamField path="staleTime" type="MaybeRefDeep<number>">
+      Time in milliseconds until cached data is considered stale. Can be a ref.
+    </ParamField>
+    
+    <ParamField path="gcTime" type="MaybeRefDeep<number>">
+      Time in milliseconds before unused data is garbage collected. Can be a ref.
+    </ParamField>
+    
+    <ParamField path="refetchInterval" type="MaybeRefDeep<number | false>">
+      Interval in milliseconds for automatic refetching. Can be a ref.
+    </ParamField>
+    
+    <ParamField path="refetchOnWindowFocus" type="MaybeRefDeep<boolean>">
+      Refetch when window regains focus. Can be a ref.
+    </ParamField>
+    
+    <ParamField path="refetchOnReconnect" type="MaybeRefDeep<boolean>">
+      Refetch when network reconnects. Can be a ref.
+    </ParamField>
+    
+    <ParamField path="retry" type="MaybeRefDeep<number | boolean>">
+      Number of retry attempts or boolean to enable/disable retries. Can be a ref.
+    </ParamField>
+    
+    <ParamField path="select" type="MaybeRefDeep<(data: TQueryData) => TData>">
+      Transform or select a part of the data. Can be a ref.
+    </ParamField>
+    
+    <ParamField path="initialData" type="MaybeRefDeep<TData | () => TData>">
+      Initial data to use before the query executes. Can be a ref.
+    </ParamField>
+    
+    <ParamField path="placeholderData" type="MaybeRefDeep<TData | () => TData>">
+      Placeholder data while the query is loading. Can be a ref.
+    </ParamField>
+    
+    <ParamField path="shallow" type="boolean">
+      Return data in a shallow ref (improves performance if data doesn't need deep reactivity).
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="queryClient" type="QueryClient">
+  Custom QueryClient instance. If not provided, uses the client from context.
+</ParamField>
+
+## Returns
+
+<ResponseField name="UseQueryReturnType<TData, TError>" type="object">
+  Reactive refs containing query state and methods.
+  
+  <Expandable title="properties">
+    <ResponseField name="data" type="Ref<TData | undefined>">
+      The query result data. Returns `undefined` if not yet loaded.
+    </ResponseField>
+    
+    <ResponseField name="error" type="Ref<TError | null>">
+      The error object if the query failed.
+    </ResponseField>
+    
+    <ResponseField name="isLoading" type="Ref<boolean>">
+      `true` when fetching for the first time (no cached data).
+    </ResponseField>
+    
+    <ResponseField name="isFetching" type="Ref<boolean>">
+      `true` whenever the query is fetching (including background refetches).
+    </ResponseField>
+    
+    <ResponseField name="isSuccess" type="Ref<boolean>">
+      `true` when the query has successfully fetched data.
+    </ResponseField>
+    
+    <ResponseField name="isError" type="Ref<boolean>">
+      `true` when the query encountered an error.
+    </ResponseField>
+    
+    <ResponseField name="isPending" type="Ref<boolean>">
+      `true` when the query is pending (no data and no error yet).
+    </ResponseField>
+    
+    <ResponseField name="status" type="Ref<'pending' | 'error' | 'success'>">
+      The current status of the query.
+    </ResponseField>
+    
+    <ResponseField name="fetchStatus" type="Ref<'fetching' | 'paused' | 'idle'>">
+      The fetch status of the query.
+    </ResponseField>
+    
+    <ResponseField name="refetch" type="() => Promise<QueryObserverResult>">
+      Manually trigger a refetch of the query.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Type Parameters
+
+- `TQueryFnData` - Type returned by the query function
+- `TError` - Type of error (defaults to `DefaultError`)
+- `TData` - Type of `data` returned (defaults to `TQueryFnData`)
+- `TQueryKey` - Type of the query key (defaults to `QueryKey`)
+
+## Examples
+
+### Basic Usage
+
+```vue
+<script setup>
+import { useQuery } from '@tanstack/vue-query'
+
+const { data, isLoading, error } = useQuery({
+  queryKey: ['todos'],
+  queryFn: async () => {
+    const res = await fetch('/api/todos')
+    return res.json()
+  },
+})
+</script>
+
+<template>
+  <div>
+    <div v-if="isLoading">Loading...</div>
+    <div v-else-if="error">Error: {{ error.message }}</div>
+    <ul v-else>
+      <li v-for="todo in data" :key="todo.id">
+        {{ todo.title }}
+      </li>
+    </ul>
+  </div>
+</template>
+```
+
+### Reactive Query Keys
+
+```vue
+<script setup>
+import { ref } from 'vue'
+import { useQuery } from '@tanstack/vue-query'
+
+const todoId = ref(1)
+
+// Query automatically refetches when todoId changes
+const { data } = useQuery({
+  queryKey: ['todo', todoId], // ref is auto-unwrapped
+  queryFn: async () => {
+    const res = await fetch(`/api/todos/${todoId.value}`)
+    return res.json()
+  },
+})
+</script>
+
+<template>
+  <div>
+    <button @click="todoId++">Next Todo</button>
+    <div v-if="data">{{ data.title }}</div>
+  </div>
+</template>
+```
+
+### With TypeScript
+
+```vue
+<script setup lang="ts">
+import { useQuery } from '@tanstack/vue-query'
+
+interface Todo {
+  id: number
+  title: string
+  completed: boolean
+}
+
+const { data } = useQuery({
+  queryKey: ['todos'],
+  queryFn: async (): Promise<Todo[]> => {
+    const res = await fetch('/api/todos')
+    return res.json()
+  },
+})
+
+// data is typed as Ref<Todo[] | undefined>
+</script>
+```
+
+### Conditional Fetching
+
+```vue
+<script setup>
+import { ref } from 'vue'
+import { useQuery } from '@tanstack/vue-query'
+
+const userId = ref(null)
+const enabled = ref(false)
+
+const { data } = useQuery({
+  queryKey: ['user', userId],
+  queryFn: () => fetchUser(userId.value),
+  enabled, // Query only runs when enabled is true
+})
+</script>
+```
+
+### With Select
+
+```vue
+<script setup>
+import { useQuery } from '@tanstack/vue-query'
+
+const { data } = useQuery({
+  queryKey: ['todos'],
+  queryFn: fetchTodos,
+  select: (todos) => todos.filter(todo => !todo.completed),
+})
+
+// data only contains incomplete todos
+</script>
+```
+
+### Shallow Reactivity
+
+```vue
+<script setup>
+import { useQuery } from '@tanstack/vue-query'
+
+// Use shallow: true for large datasets to improve performance
+const { data } = useQuery({
+  queryKey: ['large-dataset'],
+  queryFn: fetchLargeDataset,
+  shallow: true, // Prevents deep reactivity
+})
+</script>
+```
+
+## Related
+
+- [useInfiniteQuery](/api/vue/use-infinite-query) - For paginated/infinite data
+- [useQueries](/api/vue/use-queries) - Execute multiple queries in parallel
+- [useMutation](/api/vue/use-mutation) - For mutations/side effects

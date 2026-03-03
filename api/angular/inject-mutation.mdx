@@ -1,0 +1,229 @@
+---
+title: injectMutation
+description: API reference for the injectMutation function
+---
+
+## injectMutation
+
+Injects a mutation: an imperative function that can be invoked which typically performs server side effects. Unlike queries, mutations are not run automatically.
+
+```typescript
+import { injectMutation } from '@tanstack/angular-query-experimental'
+```
+
+### Signature
+
+```typescript
+function injectMutation<
+  TData = unknown,
+  TError = DefaultError,
+  TVariables = void,
+  TOnMutateResult = unknown,
+>(
+  injectMutationFn: () => CreateMutationOptions<TData, TError, TVariables, TOnMutateResult>,
+  options?: InjectMutationOptions,
+): CreateMutationResult<TData, TError, TVariables, TOnMutateResult>
+```
+
+### Parameters
+
+<ParamField path="injectMutationFn" type="() => CreateMutationOptions" required>
+  A function that returns mutation options. The function is run in a reactive context using Angular's `computed`, allowing signals to be reactive.
+
+  **CreateMutationOptions properties:**
+  - `mutationFn` - The function that performs the mutation
+  - `onSuccess` - Callback fired when the mutation succeeds
+  - `onError` - Callback fired when the mutation fails
+  - `onSettled` - Callback fired when the mutation completes (success or error)
+  - `onMutate` - Callback fired before the mutation function is executed
+  - `throwOnError` - Whether to throw errors to the nearest error boundary
+  - And other standard mutation options
+</ParamField>
+
+<ParamField path="options" type="InjectMutationOptions">
+  Additional configuration for the mutation injection.
+
+  <Expandable title="properties">
+    <ParamField path="injector" type="Injector">
+      The Angular `Injector` in which to create the mutation. If not provided, the current injection context will be used instead (via `inject`).
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+### Returns
+
+<ResponseField name="CreateMutationResult" type="object">
+  A signal-based mutation result object with the following properties and methods:
+
+  **Properties:**
+  - `data` - The data returned by the mutation function
+  - `error` - The error object if the mutation failed
+  - `status` - The status of the mutation (idle, pending, error, success)
+  - `isPending` - Boolean indicating if the mutation is currently executing
+  - `isError` - Boolean indicating if the mutation failed
+  - `isSuccess` - Boolean indicating if the mutation succeeded
+  - `isIdle` - Boolean indicating if the mutation is idle
+  - `variables` - The variables object passed to the mutation function
+
+  **Methods:**
+  - `mutate(variables, options)` - Function to trigger the mutation (fire-and-forget)
+  - `mutateAsync(variables, options)` - Function to trigger the mutation and return a promise
+  - `reset()` - Function to reset the mutation state
+</ResponseField>
+
+### Usage
+
+#### Basic example
+
+```typescript
+import { injectMutation } from '@tanstack/angular-query-experimental'
+import { HttpClient } from '@angular/common/http'
+import { inject } from '@angular/core'
+
+class ServiceOrComponent {
+  #http = inject(HttpClient)
+
+  mutation = injectMutation(() => ({
+    mutationFn: (newTodo: Todo) =>
+      this.#http.post<Todo>('/api/todos', newTodo),
+    onSuccess: (data) => {
+      console.log('Todo created:', data)
+    },
+    onError: (error) => {
+      console.error('Failed to create todo:', error)
+    },
+  }))
+
+  createTodo() {
+    this.mutation.mutate({ title: 'New Todo', completed: false })
+  }
+}
+```
+
+#### Using mutateAsync with async/await
+
+```typescript
+import { injectMutation } from '@tanstack/angular-query-experimental'
+import { HttpClient } from '@angular/common/http'
+import { inject } from '@angular/core'
+
+class ServiceOrComponent {
+  #http = inject(HttpClient)
+
+  mutation = injectMutation(() => ({
+    mutationFn: (newTodo: Todo) =>
+      this.#http.post<Todo>('/api/todos', newTodo),
+  }))
+
+  async createTodo() {
+    try {
+      const todo = await this.mutation.mutateAsync({
+        title: 'New Todo',
+        completed: false,
+      })
+      console.log('Created:', todo)
+    } catch (error) {
+      console.error('Failed:', error)
+    }
+  }
+}
+```
+
+#### Optimistic updates
+
+```typescript
+import { injectMutation } from '@tanstack/angular-query-experimental'
+import { inject } from '@angular/core'
+import { QueryClient } from '@tanstack/angular-query-experimental'
+
+class ServiceOrComponent {
+  #queryClient = inject(QueryClient)
+  #http = inject(HttpClient)
+
+  mutation = injectMutation(() => ({
+    mutationFn: (newTodo: Todo) =>
+      this.#http.post<Todo>('/api/todos', newTodo),
+    onMutate: async (newTodo) => {
+      // Cancel outgoing refetches
+      await this.#queryClient.cancelQueries({ queryKey: ['todos'] })
+
+      // Snapshot the previous value
+      const previousTodos = this.#queryClient.getQueryData(['todos'])
+
+      // Optimistically update to the new value
+      this.#queryClient.setQueryData(['todos'], (old: Todo[]) => [
+        ...old,
+        newTodo,
+      ])
+
+      // Return context with the snapshot
+      return { previousTodos }
+    },
+    onError: (err, newTodo, context) => {
+      // Rollback on error
+      this.#queryClient.setQueryData(['todos'], context?.previousTodos)
+    },
+    onSettled: () => {
+      // Refetch after error or success
+      this.#queryClient.invalidateQueries({ queryKey: ['todos'] })
+    },
+  }))
+}
+```
+
+#### Reactive mutation with signals
+
+```typescript
+import { injectMutation } from '@tanstack/angular-query-experimental'
+import { signal } from '@angular/core'
+
+class ServiceOrComponent {
+  endpoint = signal('/api/todos')
+
+  mutation = injectMutation(() => ({
+    mutationFn: (newTodo: Todo) =>
+      // The mutation function reacts to signal changes
+      this.#http.post<Todo>(this.endpoint(), newTodo),
+  }))
+}
+```
+
+#### Using with custom injector
+
+```typescript
+import { injectMutation } from '@tanstack/angular-query-experimental'
+import { Injector } from '@angular/core'
+
+class ServiceOrComponent {
+  constructor(private injector: Injector) {
+    const mutation = injectMutation(
+      () => ({
+        mutationFn: updateData,
+      }),
+      { injector: this.injector }
+    )
+  }
+}
+```
+
+### Implementation Details
+
+- The mutation uses Angular's `computed` signal for reactive options
+- Mutations are executed outside the Angular zone for performance, then results are brought back into the zone
+- Pending tasks are tracked during mutation execution for server-side rendering compatibility
+- Errors can be thrown to `NgZone.onError` if `throwOnError` is configured
+- The mutation observer is automatically cleaned up when the component/service is destroyed
+
+### Notes
+
+- Must be called within an injection context (constructor, field initializer, or factory function) unless the `injector` option is provided
+- Unlike queries, mutations are not executed automatically - you must call `mutate` or `mutateAsync`
+- The `mutate` function is fire-and-forget and will catch errors internally
+- The `mutateAsync` function returns a promise and will throw errors if not caught
+- The mutation is automatically managed and cleaned up when the component/service is destroyed
+
+### See Also
+
+- [Mutations Guide](https://tanstack.com/query/latest/docs/framework/angular/guides/mutations)
+- [injectQuery](/api/angular/inject-query)
+- [injectInfiniteQuery](/api/angular/inject-infinite-query)

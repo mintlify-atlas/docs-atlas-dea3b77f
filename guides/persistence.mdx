@@ -1,0 +1,482 @@
+---
+title: Query Persistence
+description: Persist and restore query cache to localStorage, IndexedDB, or other storage
+---
+
+TanStack Query supports persisting the query cache to external storage, allowing your app to restore cached data across page reloads and sessions.
+
+## Installation
+
+```bash
+# For localStorage/sessionStorage
+pnpm add @tanstack/query-sync-storage-persister
+
+# For AsyncStorage (React Native)
+pnpm add @tanstack/query-async-storage-persister
+
+# Core persistence package (required)
+pnpm add @tanstack/query-persist-client-core
+```
+
+## Basic Setup
+
+```tsx
+import { QueryClient } from '@tanstack/react-query'
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
+import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persister'
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      gcTime: 1000 * 60 * 60 * 24, // 24 hours
+    },
+  },
+})
+
+const persister = createSyncStoragePersister({
+  storage: window.localStorage,
+})
+
+function App() {
+  return (
+    <PersistQueryClientProvider
+      client={queryClient}
+      persistOptions={{ persister }}
+    >
+      <YourApp />
+    </PersistQueryClientProvider>
+  )
+}
+```
+
+## Storage Options
+
+### localStorage
+
+```tsx
+import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persister'
+
+const persister = createSyncStoragePersister({
+  storage: window.localStorage,
+  key: 'TANSTACK_QUERY_CACHE', // Custom key (optional)
+})
+```
+
+### sessionStorage
+
+```tsx
+const persister = createSyncStoragePersister({
+  storage: window.sessionStorage,
+})
+```
+
+### IndexedDB
+
+For larger datasets:
+
+```tsx
+import { experimental_createPersister } from '@tanstack/query-persist-client-core'
+import { get, set, del } from 'idb-keyval'
+
+const persister = experimental_createPersister({
+  storage: {
+    getItem: async (key) => await get(key),
+    setItem: async (key, value) => await set(key, value),
+    removeItem: async (key) => await del(key),
+  },
+})
+```
+
+### React Native AsyncStorage
+
+```tsx
+import AsyncStorage from '@react-native-async-storage/async-storage'
+import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister'
+
+const persister = createAsyncStoragePersister({
+  storage: AsyncStorage,
+})
+```
+
+## Persist Options
+
+```tsx
+<PersistQueryClientProvider
+  client={queryClient}
+  persistOptions={{
+    persister,
+    maxAge: 1000 * 60 * 60 * 24, // 24 hours
+    buster: 'v1', // Version your cache
+    dehydrateOptions: {
+      shouldDehydrateQuery: (query) => {
+        // Only persist successful queries
+        return query.state.status === 'success'
+      },
+    },
+    hydrateOptions: {
+      // Options for restoring queries
+    },
+  }}
+>
+  <App />
+</PersistQueryClientProvider>
+```
+
+### maxAge
+
+Cache expiration time:
+
+```tsx
+persistOptions={{
+  persister,
+  maxAge: 1000 * 60 * 60 * 24, // Discard cache older than 24 hours
+}}
+```
+
+### buster
+
+Version your cache to invalidate old formats:
+
+```tsx
+persistOptions={{
+  persister,
+  buster: 'v2', // Changing this invalidates all old caches
+}}
+```
+
+<Tip>
+Increment the `buster` value when making breaking changes to your data structure to automatically invalidate old cached data.
+</Tip>
+
+## Custom Persister
+
+Create a custom persister for any storage:
+
+```tsx
+import { experimental_createPersister } from '@tanstack/query-persist-client-core'
+
+const customPersister = experimental_createPersister({
+  storage: {
+    getItem: async (key: string) => {
+      // Implement your custom get logic
+      const data = await yourCustomStorage.get(key)
+      return data
+    },
+    setItem: async (key: string, value: string) => {
+      // Implement your custom set logic
+      await yourCustomStorage.set(key, value)
+    },
+    removeItem: async (key: string) => {
+      // Implement your custom remove logic
+      await yourCustomStorage.remove(key)
+    },
+  },
+})
+```
+
+## Selective Persistence
+
+Choose which queries to persist:
+
+```tsx
+persistOptions={{
+  persister,
+  dehydrateOptions: {
+    shouldDehydrateQuery: (query) => {
+      // Only persist queries with specific keys
+      const queryKey = query.queryKey[0]
+      return ['posts', 'users', 'comments'].includes(queryKey as string)
+    },
+  },
+}}
+```
+
+### Exclude Sensitive Data
+
+```tsx
+dehydrateOptions: {
+  shouldDehydrateQuery: (query) => {
+    // Don't persist sensitive queries
+    const queryKey = query.queryKey[0]
+    const sensitiveKeys = ['user-credentials', 'payment-info', 'auth-token']
+    return !sensitiveKeys.includes(queryKey as string)
+  },
+}
+```
+
+### Only Persist Recent Queries
+
+```tsx
+dehydrateOptions: {
+  shouldDehydrateQuery: (query) => {
+    const HOUR = 1000 * 60 * 60
+    const queryAge = Date.now() - query.state.dataUpdatedAt
+    return queryAge < HOUR // Only persist queries less than 1 hour old
+  },
+}
+```
+
+## Data Serialization
+
+Transform data during persist/restore:
+
+```tsx
+persistOptions={{
+  persister,
+  dehydrateOptions: {
+    serializeData: (data) => {
+      // Custom serialization (e.g., handle Dates)
+      return JSON.stringify(data, (key, value) => {
+        if (value instanceof Date) {
+          return { __type: 'Date', value: value.toISOString() }
+        }
+        return value
+      })
+    },
+  },
+  hydrateOptions: {
+    deserializeData: (data) => {
+      // Custom deserialization
+      return JSON.parse(data, (key, value) => {
+        if (value?.__type === 'Date') {
+          return new Date(value.value)
+        }
+        return value
+      })
+    },
+  },
+}}
+```
+
+## Manual Persistence
+
+For more control, use the persistence functions directly:
+
+```tsx
+import {
+  persistQueryClient,
+  persistQueryClientSave,
+  persistQueryClientRestore,
+} from '@tanstack/query-persist-client-core'
+import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persister'
+
+const queryClient = new QueryClient()
+const persister = createSyncStoragePersister({
+  storage: window.localStorage,
+})
+
+// Restore on app start
+await persistQueryClientRestore({
+  queryClient,
+  persister,
+  maxAge: 1000 * 60 * 60 * 24,
+})
+
+// Manually save
+await persistQueryClientSave({
+  queryClient,
+  persister,
+})
+
+// Auto-persist on cache changes
+const unsubscribe = persistQueryClientSubscribe({
+  queryClient,
+  persister,
+})
+
+// Clean up
+unsubscribe()
+```
+
+## Persist Mutations
+
+Persist paused mutations (e.g., offline support):
+
+```tsx
+dehydrateOptions: {
+  shouldDehydrateMutation: (mutation) => {
+    // Persist paused mutations (offline mutations)
+    return mutation.state.isPaused
+  },
+}
+```
+
+## Error Handling
+
+Handle persistence errors:
+
+```tsx
+import { persistQueryClient } from '@tanstack/query-persist-client-core'
+
+try {
+  await persistQueryClientRestore({
+    queryClient,
+    persister,
+  })
+} catch (error) {
+  console.error('Failed to restore cache:', error)
+  // Fall back to empty cache
+}
+```
+
+## Storage Quota Management
+
+Handle storage quota exceeded:
+
+```tsx
+const persister = experimental_createPersister({
+  storage: {
+    setItem: async (key, value) => {
+      try {
+        localStorage.setItem(key, value)
+      } catch (error) {
+        if (error.name === 'QuotaExceededError') {
+          // Clear old data
+          localStorage.removeItem(key)
+          // Try again
+          localStorage.setItem(key, value)
+        }
+      }
+    },
+    getItem: (key) => localStorage.getItem(key),
+    removeItem: (key) => localStorage.removeItem(key),
+  },
+})
+```
+
+## Compression
+
+Compress persisted data to save space:
+
+```tsx
+import LZString from 'lz-string'
+
+const persister = experimental_createPersister({
+  storage: {
+    setItem: async (key, value) => {
+      const compressed = LZString.compress(value)
+      localStorage.setItem(key, compressed)
+    },
+    getItem: async (key) => {
+      const compressed = localStorage.getItem(key)
+      return compressed ? LZString.decompress(compressed) : null
+    },
+    removeItem: (key) => localStorage.removeItem(key),
+  },
+})
+```
+
+## Multi-Tab Synchronization
+
+Sync cache across browser tabs:
+
+```tsx
+import { broadcastQueryClient } from '@tanstack/query-broadcast-client-experimental'
+
+const queryClient = new QueryClient()
+
+// Enable cross-tab sync
+broadcastQueryClient({
+  queryClient,
+  broadcastChannel: 'my-app-cache',
+})
+```
+
+## Testing with Persistence
+
+```tsx
+import { QueryClient } from '@tanstack/react-query'
+import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persister'
+import { persistQueryClient } from '@tanstack/query-persist-client-core'
+
+test('should persist and restore queries', async () => {
+  const queryClient = new QueryClient()
+  const persister = createSyncStoragePersister({
+    storage: window.localStorage,
+    key: 'TEST_CACHE',
+  })
+
+  // Add data to cache
+  queryClient.setQueryData(['test'], { value: 'data' })
+
+  // Persist
+  await persistQueryClientSave({ queryClient, persister })
+
+  // Create new client
+  const newQueryClient = new QueryClient()
+
+  // Restore
+  await persistQueryClientRestore({
+    queryClient: newQueryClient,
+    persister,
+  })
+
+  // Verify data restored
+  expect(newQueryClient.getQueryData(['test'])).toEqual({ value: 'data' })
+
+  // Cleanup
+  localStorage.removeItem('TEST_CACHE')
+})
+```
+
+## Best Practices
+
+1. **Set appropriate maxAge** - Don't persist stale data indefinitely
+2. **Use cache busting** - Version your cache for breaking changes
+3. **Exclude sensitive data** - Never persist auth tokens, passwords, etc.
+4. **Handle errors gracefully** - App should work even if restoration fails
+5. **Monitor storage size** - Especially important for mobile apps
+6. **Compress large datasets** - Use compression for better performance
+
+## Common Pitfalls
+
+### 1. Not Setting gcTime
+
+```tsx
+// ❌ Bad - Queries removed from cache before persistence
+const queryClient = new QueryClient() // default gcTime is 5 minutes
+
+// ✅ Good - Keep queries in cache long enough to persist
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      gcTime: 1000 * 60 * 60 * 24, // 24 hours
+    },
+  },
+})
+```
+
+### 2. Persisting Everything
+
+```tsx
+// ❌ Bad - Persists all queries including sensitive/temporary data
+persistOptions={{ persister }}
+
+// ✅ Good - Only persist what you need
+persistOptions={{
+  persister,
+  dehydrateOptions: {
+    shouldDehydrateQuery: (query) => {
+      // Selective persistence
+      return query.state.status === 'success' && !query.meta?.sensitive
+    },
+  },
+}}
+```
+
+### 3. Forgetting Cache Version
+
+```tsx
+// ❌ Bad - Old cache format breaks new app version
+persistOptions={{ persister }}
+
+// ✅ Good - Version your cache
+persistOptions={{
+  persister,
+  buster: 'v1', // Increment when data structure changes
+}}
+```
+
+## Next Steps
+
+- [SSR](/guides/ssr) - Combine persistence with server-side rendering

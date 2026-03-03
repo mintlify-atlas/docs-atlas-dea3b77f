@@ -1,0 +1,517 @@
+---
+title: Caching
+description: Understanding how caching works in TanStack Query, stale-while-revalidate, and garbage collection
+---
+
+Caching is at the heart of TanStack Query. It implements a stale-while-revalidate caching strategy that provides a great user experience while keeping data fresh.
+
+## The Query Cache
+
+The `QueryCache` is responsible for storing and managing all query data. From `queryCache.ts:92-98`:
+
+```typescript
+export class QueryCache extends Subscribable<QueryCacheListener> {
+  #queries: QueryStore
+
+  constructor(public config: QueryCacheConfig = {}) {
+    super()
+    this.#queries = new Map<string, Query>()
+  }
+}
+```
+
+The cache is a Map where:
+- **Keys** are query hashes (derived from query keys)
+- **Values** are `Query` instances containing state and data
+
+## Cache Time vs Stale Time
+
+Two fundamental timing concepts control caching behavior:
+
+### Stale Time
+
+**Stale time** determines how long data is considered fresh:
+
+```tsx
+useQuery({
+  queryKey: ['posts'],
+  queryFn: fetchPosts,
+  staleTime: 5 * 60 * 1000, // 5 minutes
+})
+```
+
+- **Default:** `0` (data is immediately stale)
+- **Purpose:** Controls when background refetches occur
+- **Type:** `number | 'static'`
+
+From `types.ts:102-111`:
+
+```typescript
+export type StaleTime = number | 'static'
+
+export type StaleTimeFunction<
+  TQueryFnData = unknown,
+  TError = DefaultError,
+  TData = TQueryFnData,
+  TQueryKey extends QueryKey = QueryKey,
+> =
+  | StaleTime
+  | ((query: Query<TQueryFnData, TError, TData, TQueryKey>) => StaleTime)
+```
+
+<Note>
+Setting `staleTime: 'static'` means the data is **never** considered stale and won't automatically refetch.
+</Note>
+
+### GC Time (Garbage Collection Time)
+
+**GC time** determines how long inactive data stays in the cache:
+
+```tsx
+useQuery({
+  queryKey: ['posts'],
+  queryFn: fetchPosts,
+  gcTime: 10 * 60 * 1000, // 10 minutes
+})
+```
+
+- **Default:** `5 minutes` (300,000 ms)
+- **Purpose:** Controls when unused data is garbage collected
+- **Renamed from:** `cacheTime` in v4
+
+From `types.ts:242-246`:
+
+```typescript
+/**
+ * The time in milliseconds that unused/inactive cache data remains in memory.
+ * When a query's cache becomes unused or inactive, that cache data will be garbage collected after this duration.
+ * Setting it to `Infinity` will disable garbage collection.
+ */
+gcTime?: number
+```
+
+### The Relationship
+
+```tsx
+useQuery({
+  queryKey: ['posts'],
+  queryFn: fetchPosts,
+  staleTime: 1 * 60 * 1000,    // 1 minute - when data becomes stale
+  gcTime: 5 * 60 * 1000,        // 5 minutes - when data is removed from cache
+})
+```
+
+**Timeline:**
+- `0s` - Query executes, data is fresh
+- `1m` - Data becomes stale (will refetch on next mount/focus)
+- `5m` - If no observers, data is garbage collected
+
+<Warning>
+`gcTime` should always be **greater than or equal to** `staleTime`. Otherwise, data might be removed from the cache while it's still fresh.
+</Warning>
+
+## Stale-While-Revalidate Strategy
+
+TanStack Query implements a stale-while-revalidate pattern:
+
+1. **Serve stale data immediately** from cache
+2. **Revalidate in the background** if data is stale
+3. **Update UI** when fresh data arrives
+
+```tsx
+function Posts() {
+  const { data, isFetching } = useQuery({
+    queryKey: ['posts'],
+    queryFn: fetchPosts,
+    staleTime: 60000, // 1 minute
+  })
+
+  return (
+    <div>
+      {data.map(post => <Post key={post.id} {...post} />)}
+      {isFetching && <div>Updating...</div>}
+    </div>
+  )
+}
+```
+
+**First render:**
+- No cached data → shows loading state
+- Fetches data → shows posts
+
+**Second render (within 1 minute):**
+- Shows cached posts immediately (stale time not exceeded)
+- No background fetch
+
+**Third render (after 1 minute):**
+- Shows cached posts immediately
+- Fetches in background (`isFetching: true`)
+- Updates when new data arrives
+
+## Cache Lifecycle
+
+### 1. Query Creation
+
+When a query is first used, it's built in the cache. From `queryCache.ts:100-131`:
+
+```typescript
+build<TQueryFnData = unknown, TError = DefaultError, TData = TQueryFnData, TQueryKey extends QueryKey = QueryKey>(
+  client: QueryClient,
+  options: WithRequired<QueryOptions<TQueryFnData, TError, TData, TQueryKey>, 'queryKey'>,
+  state?: QueryState<TData, TError>,
+): Query<TQueryFnData, TError, TData, TQueryKey> {
+  const queryKey = options.queryKey
+  const queryHash = options.queryHash ?? hashQueryKeyByOptions(queryKey, options)
+  let query = this.get<TQueryFnData, TError, TData, TQueryKey>(queryHash)
+
+  if (!query) {
+    query = new Query({
+      client,
+      queryKey,
+      queryHash,
+      options: client.defaultQueryOptions(options),
+      state,
+      defaultOptions: client.getQueryDefaults(queryKey),
+    })
+    this.add(query)
+  }
+
+  return query
+}
+```
+
+### 2. Observer Subscription
+
+When components use the query, observers are added. From `query.ts:343-351`:
+
+```typescript
+addObserver(observer: QueryObserver<any, any, any, any, any>): void {
+  if (!this.observers.includes(observer)) {
+    this.observers.push(observer)
+
+    // Stop the query from being garbage collected
+    this.clearGcTimeout()
+
+    this.#cache.notify({ type: 'observerAdded', query: this, observer })
+  }
+}
+```
+
+### 3. Observer Removal
+
+When components unmount, observers are removed. From `query.ts:354-374`:
+
+```typescript
+removeObserver(observer: QueryObserver<any, any, any, any, any>): void {
+  if (this.observers.includes(observer)) {
+    this.observers = this.observers.filter((x) => x !== observer)
+
+    if (!this.observers.length) {
+      // If the transport layer does not support cancellation
+      // we'll let the query continue so the result can be cached
+      if (this.#retryer) {
+        if (this.#abortSignalConsumed) {
+          this.#retryer.cancel({ revert: true })
+        } else {
+          this.#retryer.cancelRetry()
+        }
+      }
+
+      this.scheduleGc()
+    }
+
+    this.#cache.notify({ type: 'observerRemoved', query: this, observer })
+  }
+}
+```
+
+### 4. Garbage Collection
+
+When a query has no observers, it's scheduled for garbage collection based on `gcTime`.
+
+From the `Removable` class (parent of `Query`):
+
+```typescript
+protected scheduleGc(): void {
+  this.clearGcTimeout()
+
+  if (isValidTimeout(this.gcTime)) {
+    this.gcTimeout = setTimeout(() => {
+      this.optionalRemove()
+    }, this.gcTime)
+  }
+}
+```
+
+## Cache Manipulation
+
+### Reading Cache Data
+
+Get data from the cache imperatively:
+
+```tsx
+const data = queryClient.getQueryData(['posts'])
+```
+
+From `queryClient.ts:129-138`:
+
+```typescript
+getQueryData<TQueryFnData = unknown, TTaggedQueryKey extends QueryKey = QueryKey>(
+  queryKey: TTaggedQueryKey
+): TInferredQueryFnData | undefined {
+  const options = this.defaultQueryOptions({ queryKey })
+
+  return this.#queryCache.get<TInferredQueryFnData>(options.queryHash)?.state.data
+}
+```
+
+### Setting Cache Data
+
+Manually update cache data:
+
+```tsx
+queryClient.setQueryData(['posts'], (oldData) => {
+  return [...oldData, newPost]
+})
+```
+
+From `queryClient.ts:176-209`:
+
+```typescript
+setQueryData<TQueryFnData = unknown, TTaggedQueryKey extends QueryKey = QueryKey>(
+  queryKey: TTaggedQueryKey,
+  updater: Updater<NoInfer<TInferredQueryFnData> | undefined, NoInfer<TInferredQueryFnData> | undefined>,
+  options?: SetDataOptions,
+): NoInfer<TInferredQueryFnData> | undefined {
+  const defaultedOptions = this.defaultQueryOptions({ queryKey })
+  const query = this.#queryCache.get<TInferredQueryFnData>(defaultedOptions.queryHash)
+  const prevData = query?.state.data
+  const data = functionalUpdate(updater, prevData)
+
+  if (data === undefined) {
+    return undefined
+  }
+
+  return this.#queryCache
+    .build(this, defaultedOptions)
+    .setData(data, { ...options, manual: true })
+}
+```
+
+### Removing Cache Data
+
+Remove queries from the cache:
+
+```tsx
+queryClient.removeQueries({ queryKey: ['posts'] })
+```
+
+From `queryClient.ts:247-256`:
+
+```typescript
+removeQueries<TTaggedQueryKey extends QueryKey = QueryKey>(
+  filters?: QueryFilters<TTaggedQueryKey>,
+): void {
+  const queryCache = this.#queryCache
+  notifyManager.batch(() => {
+    queryCache.findAll(filters).forEach((query) => {
+      queryCache.remove(query)
+    })
+  })
+}
+```
+
+## Cache Persistence
+
+Persist cache to storage for offline support:
+
+```tsx
+import { QueryClient } from '@tanstack/react-query'
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
+import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persister'
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      gcTime: 1000 * 60 * 60 * 24, // 24 hours
+    },
+  },
+})
+
+const persister = createSyncStoragePersister({
+  storage: window.localStorage,
+})
+
+function App() {
+  return (
+    <PersistQueryClientProvider
+      client={queryClient}
+      persistOptions={{ persister }}
+    >
+      {/* Your app */}
+    </PersistQueryClientProvider>
+  )
+}
+```
+
+From the basic example (`examples/react/basic/src/index.tsx:8-18`):
+
+```typescript
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      gcTime: 1000 * 60 * 60 * 24, // 24 hours
+    },
+  },
+})
+
+const persister = createAsyncStoragePersister({
+  storage: window.localStorage,
+})
+```
+
+## Structural Sharing
+
+TanStack Query performs structural sharing to preserve referential equality:
+
+```tsx
+const { data: posts } = useQuery({
+  queryKey: ['posts'],
+  queryFn: fetchPosts,
+})
+
+// If the data hasn't changed, `posts` maintains the same reference
+// This prevents unnecessary re-renders
+```
+
+From `types.ts:261-267`:
+
+```typescript
+/**
+ * Set this to `false` to disable structural sharing between query results.
+ * Set this to a function which accepts the old and new data and returns resolved data of the same type to implement custom structural sharing logic.
+ * Defaults to `true`.
+ */
+structuralSharing?:
+  | boolean
+  | ((oldData: unknown | undefined, newData: unknown) => unknown)
+```
+
+<Tip>
+Structural sharing is especially useful for large lists where only a few items change. It preserves references to unchanged objects.
+</Tip>
+
+## Cache Configuration
+
+### Global Defaults
+
+```tsx
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 60 * 1000,        // 1 minute
+      gcTime: 5 * 60 * 1000,        // 5 minutes
+      retry: 3,
+      refetchOnWindowFocus: true,
+      refetchOnReconnect: true,
+    },
+  },
+})
+```
+
+### Per-Query Configuration
+
+```tsx
+useQuery({
+  queryKey: ['posts'],
+  queryFn: fetchPosts,
+  staleTime: 10 * 60 * 1000,    // 10 minutes - overrides default
+  gcTime: Infinity,              // Never garbage collect
+})
+```
+
+### Query-Specific Defaults
+
+Set defaults for specific query keys:
+
+```tsx
+queryClient.setQueryDefaults(['posts'], {
+  staleTime: 10 * 60 * 1000,
+  gcTime: 15 * 60 * 1000,
+})
+```
+
+## Cache Events
+
+Listen to cache events:
+
+```tsx
+const queryCache = new QueryCache({
+  onSuccess: (data, query) => {
+    console.log('Query succeeded:', query.queryKey)
+  },
+  onError: (error, query) => {
+    console.error('Query failed:', query.queryKey, error)
+  },
+  onSettled: (data, error, query) => {
+    console.log('Query settled:', query.queryKey)
+  },
+})
+
+const queryClient = new QueryClient({ queryCache })
+```
+
+From `queryCache.ts:19-30`:
+
+```typescript
+interface QueryCacheConfig {
+  onError?: (
+    error: DefaultError,
+    query: Query<unknown, unknown, unknown>,
+  ) => void
+  onSuccess?: (data: unknown, query: Query<unknown, unknown, unknown>) => void
+  onSettled?: (
+    data: unknown | undefined,
+    error: DefaultError | null,
+    query: Query<unknown, unknown, unknown>,
+  ) => void
+}
+```
+
+## Best Practices
+
+### 1. Set Appropriate Stale Times
+
+```tsx
+// Frequently changing data
+useQuery({ queryKey: ['feed'], queryFn: fetchFeed, staleTime: 0 })
+
+// Rarely changing data
+useQuery({ queryKey: ['settings'], queryFn: fetchSettings, staleTime: Infinity })
+
+// Moderately changing data
+useQuery({ queryKey: ['posts'], queryFn: fetchPosts, staleTime: 5 * 60 * 1000 })
+```
+
+### 2. Use Longer GC Times for Expensive Queries
+
+```tsx
+useQuery({
+  queryKey: ['analytics', 'dashboard'],
+  queryFn: fetchDashboardAnalytics,
+  staleTime: 5 * 60 * 1000,     // 5 minutes
+  gcTime: 30 * 60 * 1000,        // 30 minutes - keep in cache longer
+})
+```
+
+### 3. Prefetch for Better UX
+
+```tsx
+// Prefetch on hover
+const handleMouseEnter = () => {
+  queryClient.prefetchQuery({
+    queryKey: ['post', postId],
+    queryFn: () => fetchPost(postId),
+  })
+}
+```

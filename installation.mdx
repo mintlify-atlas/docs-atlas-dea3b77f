@@ -1,0 +1,274 @@
+---
+title: Installation
+description: Install TanStack Query for your JavaScript framework of choice.
+---
+
+# Installation
+
+TanStack Query is available for all major JavaScript frameworks. Choose your framework below and install the corresponding package.
+
+## React
+
+Install `@tanstack/react-query` for React 18 or 19 applications.
+
+<CodeGroup>
+```bash npm
+npm install @tanstack/react-query
+```
+
+```bash yarn
+yarn add @tanstack/react-query
+```
+
+```bash pnpm
+pnpm add @tanstack/react-query
+```
+</CodeGroup>
+
+<Note>
+  `@tanstack/react-query` requires React 18 or higher. The package provides hooks for managing async state and includes full TypeScript support.
+</Note>
+
+### React Devtools (Optional)
+
+For development, install the React Query Devtools to visualize and debug your queries:
+
+<CodeGroup>
+```bash npm
+npm install @tanstack/react-query-devtools
+```
+
+```bash yarn
+yarn add @tanstack/react-query-devtools
+```
+
+```bash pnpm
+pnpm add @tanstack/react-query-devtools
+```
+</CodeGroup>
+
+## Vue
+
+Install `@tanstack/vue-query` for Vue 2.6+, 2.7, or Vue 3 applications.
+
+<CodeGroup>
+```bash npm
+npm install @tanstack/vue-query
+```
+
+```bash yarn
+yarn add @tanstack/vue-query
+```
+
+```bash pnpm
+pnpm add @tanstack/vue-query
+```
+</CodeGroup>
+
+<Note>
+  For Vue 2.6, you'll also need to install `@vue/composition-api` as a peer dependency. Vue 2.7 and Vue 3 include the Composition API natively.
+</Note>
+
+### Vue Devtools (Optional)
+
+<CodeGroup>
+```bash npm
+npm install @tanstack/vue-query-devtools
+```
+
+```bash yarn
+yarn add @tanstack/vue-query-devtools
+```
+
+```bash pnpm
+pnpm add @tanstack/vue-query-devtools
+```
+</CodeGroup>
+
+## Solid
+
+Install `@tanstack/solid-query` for SolidJS 1.6+ applications.
+
+<CodeGroup>
+```bash npm
+npm install @tanstack/solid-query
+```
+
+```bash yarn
+yarn add @tanstack/solid-query
+```
+
+```bash pnpm
+pnpm add @tanstack/solid-query
+```
+</CodeGroup>
+
+<Note>
+  `@tanstack/solid-query` provides reactive primitives that integrate seamlessly with Solid's fine-grained reactivity system.
+</Note>
+
+### Solid Devtools (Optional)
+
+<CodeGroup>
+```bash npm
+npm install @tanstack/solid-query-devtools
+```
+
+```bash yarn
+yarn add @tanstack/solid-query-devtools
+```
+
+```bash pnpm
+pnpm add @tanstack/solid-query-devtools
+```
+</CodeGroup>
+
+## Svelte
+
+Install `@tanstack/svelte-query` for Svelte 5.25+ applications.
+
+<CodeGroup>
+```bash npm
+npm install @tanstack/svelte-query
+```
+
+```bash yarn
+yarn add @tanstack/svelte-query
+```
+
+```bash pnpm
+pnpm add @tanstack/svelte-query
+```
+</CodeGroup>
+
+<Note>
+  `@tanstack/svelte-query` is designed for Svelte 5 and leverages Svelte's latest reactivity features.
+</Note>
+
+### Svelte Devtools (Optional)
+
+<CodeGroup>
+```bash npm
+npm install @tanstack/svelte-query-devtools
+```
+
+```bash yarn
+yarn add @tanstack/svelte-query-devtools
+```
+
+```bash pnpm
+pnpm add @tanstack/svelte-query-devtools
+```
+</CodeGroup>
+
+## Angular
+
+Install `@tanstack/angular-query-experimental` for Angular 16+ applications.
+
+<CodeGroup>
+```bash npm
+npm install @tanstack/angular-query-experimental
+```
+
+```bash yarn
+yarn add @tanstack/angular-query-experimental
+```
+
+```bash pnpm
+pnpm add @tanstack/angular-query-experimental
+```
+</CodeGroup>
+
+<Note>
+  The Angular package is currently experimental and uses Angular's Signals API. It requires Angular 16 or higher.
+</Note>
+
+## Preact
+
+Install `@tanstack/preact-query` for Preact 10+ applications.
+
+<CodeGroup>
+```bash npm
+npm install @tanstack/preact-query
+```
+
+```bash yarn
+yarn add @tanstack/preact-query
+```
+
+```bash pnpm
+pnpm add @tanstack/preact-query
+```
+</CodeGroup>
+
+<Note>
+  `@tanstack/preact-query` provides the same hooks-based API as React Query, optimized for Preact.
+</Note>
+
+### Preact Devtools (Optional)
+
+<CodeGroup>
+```bash npm
+npm install @tanstack/preact-query-devtools
+```
+
+```bash yarn
+yarn add @tanstack/preact-query-devtools
+```
+
+```bash pnpm
+pnpm add @tanstack/preact-query-devtools
+```
+</CodeGroup>
+
+## Additional Packages
+
+TanStack Query offers additional packages for advanced use cases:
+
+### Persistence
+
+Persist your query cache to localStorage, AsyncStorage, or custom storage:
+
+- **React**: `@tanstack/react-query-persist-client`
+- **Vue**: `@tanstack/vue-query-persist-client`
+- **Solid**: `@tanstack/solid-query-persist-client`
+- **Svelte**: `@tanstack/svelte-query-persist-client`
+- **Angular**: `@tanstack/angular-query-persist-client`
+- **Preact**: `@tanstack/preact-query-persist-client`
+
+### Storage Persisters
+
+- `@tanstack/query-sync-storage-persister` - For synchronous storage (localStorage, sessionStorage)
+- `@tanstack/query-async-storage-persister` - For asynchronous storage (IndexedDB, React Native AsyncStorage)
+
+### ESLint Plugin
+
+Enforce best practices in your codebase:
+
+<CodeGroup>
+```bash npm
+npm install @tanstack/eslint-plugin-query --save-dev
+```
+
+```bash yarn
+yarn add @tanstack/eslint-plugin-query --dev
+```
+
+```bash pnpm
+pnpm add @tanstack/eslint-plugin-query --save-dev
+```
+</CodeGroup>
+
+## Next Steps
+
+Now that you've installed TanStack Query, you're ready to start building:
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Build your first query in minutes
+  </Card>
+  
+  <Card title="Core Concepts" icon="book" href="/core-concepts">
+    Learn the fundamental concepts
+  </Card>
+</CardGroup>

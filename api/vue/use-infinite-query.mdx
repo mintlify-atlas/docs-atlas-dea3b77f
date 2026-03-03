@@ -1,0 +1,383 @@
+---
+title: useInfiniteQuery
+description: Vue composable for fetching paginated or infinite data
+---
+
+Fetch paginated or infinite scrolling data with the `useInfiniteQuery` composable. It manages multiple pages of data and provides methods to load more pages.
+
+## Signature
+
+```ts
+function useInfiniteQuery<TQueryFnData, TError, TData, TQueryKey, TPageParam>(
+  options: UseInfiniteQueryOptions<TQueryFnData, TError, TData, TQueryKey, TPageParam>,
+  queryClient?: QueryClient,
+): UseInfiniteQueryReturnType<TData, TError>
+```
+
+## Parameters
+
+<ParamField path="options" type="UseInfiniteQueryOptions<TQueryFnData, TError, TData, TQueryKey, TPageParam>" required>
+  Configuration options for the infinite query. Can be a reactive ref or getter function.
+  
+  <Expandable title="properties">
+    <ParamField path="queryKey" type="MaybeRefDeep<QueryKey>" required>
+      Unique identifier for the query. Can be a ref or contain refs.
+    </ParamField>
+    
+    <ParamField path="queryFn" type="MaybeRefDeep<(context: QueryFunctionContext<TQueryKey, TPageParam>) => Promise<TQueryFnData>>" required>
+      Function that fetches a page of data. Receives `pageParam` in context. Can be a ref.
+    </ParamField>
+    
+    <ParamField path="initialPageParam" type="TPageParam" required>
+      The initial page parameter for the first page.
+    </ParamField>
+    
+    <ParamField path="getNextPageParam" type="MaybeRefDeep<(lastPage: TQueryFnData, allPages: TQueryFnData[], lastPageParam: TPageParam, allPageParams: TPageParam[]) => TPageParam | undefined | null>" required>
+      Function to determine the next page parameter. Return `undefined` or `null` when there are no more pages. Can be a ref.
+    </ParamField>
+    
+    <ParamField path="getPreviousPageParam" type="MaybeRefDeep<(firstPage: TQueryFnData, allPages: TQueryFnData[], firstPageParam: TPageParam, allPageParams: TPageParam[]) => TPageParam | undefined | null>">
+      Function to determine the previous page parameter for bi-directional pagination. Can be a ref.
+    </ParamField>
+    
+    <ParamField path="enabled" type="MaybeRefOrGetter<boolean>">
+      Set to `false` to disable automatic query execution. Supports refs and getters.
+    </ParamField>
+    
+    <ParamField path="staleTime" type="MaybeRefDeep<number>">
+      Time in milliseconds until cached data is considered stale. Can be a ref.
+    </ParamField>
+    
+    <ParamField path="gcTime" type="MaybeRefDeep<number>">
+      Time in milliseconds before unused data is garbage collected. Can be a ref.
+    </ParamField>
+    
+    <ParamField path="refetchOnWindowFocus" type="MaybeRefDeep<boolean>">
+      Refetch when window regains focus. Can be a ref.
+    </ParamField>
+    
+    <ParamField path="select" type="MaybeRefDeep<(data: InfiniteData<TQueryFnData, TPageParam>) => TData>">
+      Transform or select a part of the data. Can be a ref.
+    </ParamField>
+    
+    <ParamField path="shallow" type="boolean">
+      Return data in a shallow ref (improves performance if data doesn't need deep reactivity).
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="queryClient" type="QueryClient">
+  Custom QueryClient instance. If not provided, uses the client from context.
+</ParamField>
+
+## Returns
+
+<ResponseField name="UseInfiniteQueryReturnType<TData, TError>" type="object">
+  Reactive refs containing infinite query state and methods.
+  
+  <Expandable title="properties">
+    <ResponseField name="data" type="Ref<InfiniteData<TData, TPageParam> | undefined>">
+      Object containing all pages of data with `pages` and `pageParams` arrays.
+    </ResponseField>
+    
+    <ResponseField name="error" type="Ref<TError | null>">
+      The error object if the query failed.
+    </ResponseField>
+    
+    <ResponseField name="isLoading" type="Ref<boolean>">
+      `true` when fetching the first page for the first time.
+    </ResponseField>
+    
+    <ResponseField name="isFetching" type="Ref<boolean>">
+      `true` whenever the query is fetching (including additional pages).
+    </ResponseField>
+    
+    <ResponseField name="isFetchingNextPage" type="Ref<boolean>">
+      `true` when fetching the next page.
+    </ResponseField>
+    
+    <ResponseField name="isFetchingPreviousPage" type="Ref<boolean>">
+      `true` when fetching the previous page.
+    </ResponseField>
+    
+    <ResponseField name="hasNextPage" type="Ref<boolean>">
+      `true` if there is a next page to fetch.
+    </ResponseField>
+    
+    <ResponseField name="hasPreviousPage" type="Ref<boolean>">
+      `true` if there is a previous page to fetch.
+    </ResponseField>
+    
+    <ResponseField name="fetchNextPage" type="(options?: FetchNextPageOptions) => Promise<InfiniteQueryObserverResult>">
+      Fetch the next page of data.
+    </ResponseField>
+    
+    <ResponseField name="fetchPreviousPage" type="(options?: FetchPreviousPageOptions) => Promise<InfiniteQueryObserverResult>">
+      Fetch the previous page of data.
+    </ResponseField>
+    
+    <ResponseField name="isSuccess" type="Ref<boolean>">
+      `true` when the query has successfully fetched data.
+    </ResponseField>
+    
+    <ResponseField name="isError" type="Ref<boolean>">
+      `true` when the query encountered an error.
+    </ResponseField>
+    
+    <ResponseField name="status" type="Ref<'pending' | 'error' | 'success'>">
+      The current status of the query.
+    </ResponseField>
+    
+    <ResponseField name="refetch" type="() => Promise<InfiniteQueryObserverResult>">
+      Manually trigger a refetch of all pages.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Type Parameters
+
+- `TQueryFnData` - Type of data returned by each page
+- `TError` - Type of error (defaults to `DefaultError`)
+- `TData` - Type of final data (defaults to `InfiniteData<TQueryFnData>`)
+- `TQueryKey` - Type of the query key (defaults to `QueryKey`)
+- `TPageParam` - Type of page parameter (defaults to `unknown`)
+
+## Examples
+
+### Basic Infinite Scroll
+
+```vue
+<script setup>
+import { useInfiniteQuery } from '@tanstack/vue-query'
+
+const {
+  data,
+  fetchNextPage,
+  hasNextPage,
+  isFetchingNextPage,
+} = useInfiniteQuery({
+  queryKey: ['posts'],
+  queryFn: async ({ pageParam }) => {
+    const res = await fetch(`/api/posts?page=${pageParam}`)
+    return res.json()
+  },
+  initialPageParam: 0,
+  getNextPageParam: (lastPage, allPages) => {
+    return lastPage.hasMore ? allPages.length : undefined
+  },
+})
+</script>
+
+<template>
+  <div>
+    <div v-for="page in data?.pages" :key="page.id">
+      <div v-for="post in page.posts" :key="post.id">
+        <h3>{{ post.title }}</h3>
+        <p>{{ post.body }}</p>
+      </div>
+    </div>
+    
+    <button
+      @click="fetchNextPage()"
+      :disabled="!hasNextPage || isFetchingNextPage"
+    >
+      <span v-if="isFetchingNextPage">Loading more...</span>
+      <span v-else-if="hasNextPage">Load More</span>
+      <span v-else>No more posts</span>
+    </button>
+  </div>
+</template>
+```
+
+### Cursor-Based Pagination
+
+```vue
+<script setup>
+import { useInfiniteQuery } from '@tanstack/vue-query'
+
+const { data, fetchNextPage, hasNextPage } = useInfiniteQuery({
+  queryKey: ['posts'],
+  queryFn: async ({ pageParam }) => {
+    const res = await fetch(`/api/posts?cursor=${pageParam}`)
+    return res.json()
+  },
+  initialPageParam: 0,
+  getNextPageParam: (lastPage) => lastPage.nextCursor,
+})
+</script>
+```
+
+### Bi-directional Pagination
+
+```vue
+<script setup>
+import { useInfiniteQuery } from '@tanstack/vue-query'
+
+const {
+  data,
+  fetchNextPage,
+  fetchPreviousPage,
+  hasNextPage,
+  hasPreviousPage,
+} = useInfiniteQuery({
+  queryKey: ['posts'],
+  queryFn: async ({ pageParam }) => {
+    const res = await fetch(`/api/posts?cursor=${pageParam}`)
+    return res.json()
+  },
+  initialPageParam: 0,
+  getNextPageParam: (lastPage) => lastPage.nextCursor,
+  getPreviousPageParam: (firstPage) => firstPage.prevCursor,
+})
+</script>
+
+<template>
+  <div>
+    <button @click="fetchPreviousPage()" :disabled="!hasPreviousPage">
+      Load Previous
+    </button>
+    
+    <!-- Posts display -->
+    
+    <button @click="fetchNextPage()" :disabled="!hasNextPage">
+      Load Next
+    </button>
+  </div>
+</template>
+```
+
+### With TypeScript
+
+```vue
+<script setup lang="ts">
+import { useInfiniteQuery } from '@tanstack/vue-query'
+
+interface Post {
+  id: number
+  title: string
+  body: string
+}
+
+interface PostsPage {
+  posts: Post[]
+  nextCursor?: number
+  hasMore: boolean
+}
+
+const { data } = useInfiniteQuery({
+  queryKey: ['posts'],
+  queryFn: async ({ pageParam }): Promise<PostsPage> => {
+    const res = await fetch(`/api/posts?cursor=${pageParam}`)
+    return res.json()
+  },
+  initialPageParam: 0,
+  getNextPageParam: (lastPage) => lastPage.nextCursor,
+})
+
+// data.pages is typed as PostsPage[]
+</script>
+```
+
+### Reactive Page Parameters
+
+```vue
+<script setup>
+import { ref } from 'vue'
+import { useInfiniteQuery } from '@tanstack/vue-query'
+
+const filter = ref('all')
+
+const { data, fetchNextPage } = useInfiniteQuery({
+  queryKey: ['posts', filter], // Refetches when filter changes
+  queryFn: async ({ pageParam }) => {
+    const res = await fetch(
+      `/api/posts?filter=${filter.value}&cursor=${pageParam}`
+    )
+    return res.json()
+  },
+  initialPageParam: 0,
+  getNextPageParam: (lastPage) => lastPage.nextCursor,
+})
+</script>
+
+<template>
+  <select v-model="filter">
+    <option value="all">All</option>
+    <option value="active">Active</option>
+    <option value="completed">Completed</option>
+  </select>
+</template>
+```
+
+### Infinite Scroll with Intersection Observer
+
+```vue
+<script setup>
+import { ref, watch } from 'vue'
+import { useInfiniteQuery } from '@tanstack/vue-query'
+
+const loadMoreRef = ref(null)
+
+const { data, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
+  queryKey: ['posts'],
+  queryFn: fetchPosts,
+  initialPageParam: 0,
+  getNextPageParam: (lastPage) => lastPage.nextCursor,
+})
+
+// Auto-load more when element is visible
+watch(loadMoreRef, (el) => {
+  if (!el) return
+  
+  const observer = new IntersectionObserver(
+    ([entry]) => {
+      if (entry.isIntersecting && hasNextPage.value && !isFetchingNextPage.value) {
+        fetchNextPage()
+      }
+    },
+    { threshold: 1.0 }
+  )
+  
+  observer.observe(el)
+})
+</script>
+
+<template>
+  <div>
+    <div v-for="page in data?.pages" :key="page.id">
+      <div v-for="post in page.posts" :key="post.id">
+        {{ post.title }}
+      </div>
+    </div>
+    
+    <div ref="loadMoreRef" v-if="hasNextPage">
+      <span v-if="isFetchingNextPage">Loading...</span>
+    </div>
+  </div>
+</template>
+```
+
+### Refetch All Pages
+
+```vue
+<script setup>
+import { useInfiniteQuery } from '@tanstack/vue-query'
+
+const { data, refetch } = useInfiniteQuery({
+  queryKey: ['posts'],
+  queryFn: fetchPosts,
+  initialPageParam: 0,
+  getNextPageParam: (lastPage) => lastPage.nextCursor,
+})
+
+const refreshAll = () => {
+  // Refetches all loaded pages
+  refetch()
+}
+</script>
+```
+
+## Related
+
+- [useQuery](/api/vue/use-query) - For non-paginated data
+- [Infinite Queries Guide](/guides/infinite-queries) - Detailed guide on infinite queries

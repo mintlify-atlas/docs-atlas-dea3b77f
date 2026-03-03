@@ -1,0 +1,169 @@
+---
+title: injectQuery
+description: API reference for the injectQuery function
+---
+
+## injectQuery
+
+Injects a query: a declarative dependency on an asynchronous source of data that is tied to a unique key.
+
+```typescript
+import { injectQuery } from '@tanstack/angular-query-experimental'
+```
+
+### Signature
+
+```typescript
+function injectQuery<
+  TQueryFnData = unknown,
+  TError = DefaultError,
+  TData = TQueryFnData,
+  TQueryKey extends QueryKey = QueryKey,
+>(
+  injectQueryFn: () => CreateQueryOptions<TQueryFnData, TError, TData, TQueryKey>,
+  options?: InjectQueryOptions,
+): CreateQueryResult<TData, TError>
+```
+
+### Parameters
+
+<ParamField path="injectQueryFn" type="() => CreateQueryOptions" required>
+  A function that returns query options. The function is run in a reactive context, similar to Angular's `computed`. This allows signals to be inserted into the options, making the query reactive.
+
+  **CreateQueryOptions properties:**
+  - `queryKey` - A unique key for the query
+  - `queryFn` - The function that the query will use to fetch data
+  - `enabled` - Whether the query should run automatically
+  - `staleTime` - Time in milliseconds before data is considered stale
+  - `gcTime` - Time in milliseconds before inactive queries are garbage collected
+  - And other standard query options
+</ParamField>
+
+<ParamField path="options" type="InjectQueryOptions">
+  Additional configuration for the query injection.
+
+  <Expandable title="properties">
+    <ParamField path="injector" type="Injector">
+      The Angular `Injector` in which to create the query. If not provided, the current injection context will be used instead (via `inject`).
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+### Returns
+
+<ResponseField name="CreateQueryResult" type="object">
+  A signal-based query result object with the following properties:
+  - `data` - The data returned by the query function
+  - `error` - The error object if the query failed
+  - `status` - The status of the query (pending, error, success)
+  - `isPending` - Boolean indicating if the query is in pending state
+  - `isError` - Boolean indicating if the query failed
+  - `isSuccess` - Boolean indicating if the query succeeded
+  - `refetch` - Function to manually refetch the query
+  - And other standard query result properties
+</ResponseField>
+
+### Usage
+
+#### Basic example
+
+```typescript
+import { injectQuery } from '@tanstack/angular-query-experimental'
+import { HttpClient } from '@angular/common/http'
+import { inject } from '@angular/core'
+
+class ServiceOrComponent {
+  #http = inject(HttpClient)
+
+  query = injectQuery(() => ({
+    queryKey: ['repoData'],
+    queryFn: () =>
+      this.#http.get<Response>('https://api.github.com/repos/tanstack/query'),
+  }))
+}
+```
+
+#### Reactive example with signals
+
+Similar to `computed` from Angular, the function passed to `injectQuery` will be run in the reactive context. In the example below, the query will be automatically enabled and executed when the filter signal changes to a truthy value. When the filter signal changes back to a falsy value, the query will be disabled.
+
+```typescript
+import { injectQuery } from '@tanstack/angular-query-experimental'
+import { signal } from '@angular/core'
+
+class ServiceOrComponent {
+  filter = signal('')
+
+  todosQuery = injectQuery(() => ({
+    queryKey: ['todos', this.filter()],
+    queryFn: () => fetchTodos(this.filter()),
+    // Signals can be combined with expressions
+    enabled: !!this.filter(),
+  }))
+}
+```
+
+#### Using with custom injector
+
+```typescript
+import { injectQuery } from '@tanstack/angular-query-experimental'
+import { Injector } from '@angular/core'
+
+class ServiceOrComponent {
+  constructor(private injector: Injector) {
+    const query = injectQuery(
+      () => ({
+        queryKey: ['data'],
+        queryFn: fetchData,
+      }),
+      { injector: this.injector }
+    )
+  }
+}
+```
+
+### Type Overloads
+
+#### With defined initial data
+
+```typescript
+function injectQuery<
+  TQueryFnData = unknown,
+  TError = DefaultError,
+  TData = TQueryFnData,
+  TQueryKey extends QueryKey = QueryKey,
+>(
+  injectQueryFn: () => DefinedInitialDataOptions<TQueryFnData, TError, TData, TQueryKey>,
+  options?: InjectQueryOptions,
+): DefinedCreateQueryResult<TData, TError>
+```
+
+When `initialData` is provided and defined, the query result is guaranteed to have data available immediately.
+
+#### With undefined initial data
+
+```typescript
+function injectQuery<
+  TQueryFnData = unknown,
+  TError = DefaultError,
+  TData = TQueryFnData,
+  TQueryKey extends QueryKey = QueryKey,
+>(
+  injectQueryFn: () => UndefinedInitialDataOptions<TQueryFnData, TError, TData, TQueryKey>,
+  options?: InjectQueryOptions,
+): CreateQueryResult<TData, TError>
+```
+
+When `initialData` is not provided or is undefined, the query result data may be undefined initially.
+
+### Notes
+
+- Must be called within an injection context (constructor, field initializer, or factory function) unless the `injector` option is provided
+- The query function is reactive and will re-run when any signals used inside it change
+- The query is automatically managed and cleaned up when the component/service is destroyed
+
+### See Also
+
+- [Queries Guide](https://tanstack.com/query/latest/docs/framework/angular/guides/queries)
+- [injectInfiniteQuery](/api/angular/inject-infinite-query)
+- [injectMutation](/api/angular/inject-mutation)

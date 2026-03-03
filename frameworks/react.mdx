@@ -1,0 +1,421 @@
+---
+title: React
+description: TanStack Query for React - Hooks for managing server state
+---
+
+TanStack Query for React provides powerful hooks for fetching, caching, and updating asynchronous data in your React applications.
+
+## Installation
+
+```bash
+npm install @tanstack/react-query
+# or
+pnpm add @tanstack/react-query
+# or
+yarn add @tanstack/react-query
+```
+
+## Setup
+
+Wrap your application with `QueryClientProvider`:
+
+```tsx
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+
+const queryClient = new QueryClient()
+
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <YourApp />
+    </QueryClientProvider>
+  )
+}
+```
+
+## Core Hooks
+
+### useQuery
+
+Fetch and cache data with the `useQuery` hook:
+
+```tsx
+import { useQuery } from '@tanstack/react-query'
+
+function Todos() {
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['todos'],
+    queryFn: async () => {
+      const res = await fetch('/api/todos')
+      return res.json()
+    },
+  })
+
+  if (isLoading) return <div>Loading...</div>
+  if (error) return <div>Error: {error.message}</div>
+
+  return (
+    <ul>
+      {data.map((todo) => (
+        <li key={todo.id}>{todo.title}</li>
+      ))}
+    </ul>
+  )
+}
+```
+
+### useMutation
+
+Perform side effects with the `useMutation` hook:
+
+```tsx
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+
+function AddTodo() {
+  const queryClient = useQueryClient()
+  
+  const mutation = useMutation({
+    mutationFn: async (newTodo) => {
+      const res = await fetch('/api/todos', {
+        method: 'POST',
+        body: JSON.stringify(newTodo),
+      })
+      return res.json()
+    },
+    onSuccess: () => {
+      // Invalidate and refetch
+      queryClient.invalidateQueries({ queryKey: ['todos'] })
+    },
+  })
+
+  return (
+    <button onClick={() => mutation.mutate({ title: 'New Todo' })}>
+      Add Todo
+    </button>
+  )
+}
+```
+
+### useInfiniteQuery
+
+Implement infinite scrolling or pagination:
+
+```tsx
+import { useInfiniteQuery } from '@tanstack/react-query'
+
+function Posts() {
+  const {
+    data,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
+    queryKey: ['posts'],
+    queryFn: async ({ pageParam = 0 }) => {
+      const res = await fetch(`/api/posts?page=${pageParam}`)
+      return res.json()
+    },
+    getNextPageParam: (lastPage, pages) => lastPage.nextCursor,
+    initialPageParam: 0,
+  })
+
+  return (
+    <div>
+      {data?.pages.map((page) => (
+        page.posts.map((post) => <Post key={post.id} post={post} />)
+      ))}
+      <button
+        onClick={() => fetchNextPage()}
+        disabled={!hasNextPage || isFetchingNextPage}
+      >
+        {isFetchingNextPage ? 'Loading...' : 'Load More'}
+      </button>
+    </div>
+  )
+}
+```
+
+## Suspense Support
+
+### useSuspenseQuery
+
+React Query has first-class support for React Suspense:
+
+```tsx
+import { Suspense } from 'react'
+import { useSuspenseQuery } from '@tanstack/react-query'
+
+function TodoList() {
+  // This will suspend while loading
+  const { data } = useSuspenseQuery({
+    queryKey: ['todos'],
+    queryFn: fetchTodos,
+  })
+
+  return (
+    <ul>
+      {data.map((todo) => (
+        <li key={todo.id}>{todo.title}</li>
+      ))}
+    </ul>
+  )
+}
+
+function App() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <TodoList />
+    </Suspense>
+  )
+}
+```
+
+<Note>
+`useSuspenseQuery` automatically sets `enabled: true` and `suspense: true`. The query will never return `isLoading` - it will suspend instead.
+</Note>
+
+### useSuspenseInfiniteQuery
+
+Combine Suspense with infinite queries:
+
+```tsx
+import { useSuspenseInfiniteQuery } from '@tanstack/react-query'
+
+function InfinitePosts() {
+  const { data, fetchNextPage, hasNextPage } = useSuspenseInfiniteQuery({
+    queryKey: ['posts'],
+    queryFn: ({ pageParam = 0 }) => fetchPosts(pageParam),
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+    initialPageParam: 0,
+  })
+
+  // No loading state needed - component suspends automatically
+  return <PostList data={data} onLoadMore={fetchNextPage} />
+}
+```
+
+## Advanced Patterns
+
+### useQueries
+
+Execute multiple queries in parallel:
+
+```tsx
+import { useQueries } from '@tanstack/react-query'
+
+function UserData({ userIds }) {
+  const results = useQueries({
+    queries: userIds.map((id) => ({
+      queryKey: ['user', id],
+      queryFn: () => fetchUser(id),
+    })),
+  })
+
+  // results is an array of query results
+  const isLoading = results.some((result) => result.isLoading)
+  
+  return <div>{/* render results */}</div>
+}
+```
+
+### Query Options Factory
+
+Create reusable query configurations:
+
+```tsx
+import { queryOptions, useQuery } from '@tanstack/react-query'
+
+const todoQueries = {
+  all: () => queryOptions({
+    queryKey: ['todos'],
+    queryFn: fetchTodos,
+  }),
+  detail: (id: number) => queryOptions({
+    queryKey: ['todos', id],
+    queryFn: () => fetchTodo(id),
+  }),
+}
+
+function TodoDetail({ id }) {
+  const { data } = useQuery(todoQueries.detail(id))
+  return <div>{data.title}</div>
+}
+```
+
+### Error Boundaries
+
+Handle errors with React Error Boundaries:
+
+```tsx
+import { QueryErrorResetBoundary } from '@tanstack/react-query'
+import { ErrorBoundary } from 'react-error-boundary'
+
+function App() {
+  return (
+    <QueryErrorResetBoundary>
+      {({ reset }) => (
+        <ErrorBoundary
+          onReset={reset}
+          fallbackRender={({ resetErrorBoundary }) => (
+            <div>
+              There was an error!
+              <button onClick={resetErrorBoundary}>Try again</button>
+            </div>
+          )}
+        >
+          <YourApp />
+        </ErrorBoundary>
+      )}
+    </QueryErrorResetBoundary>
+  )
+}
+```
+
+## Hydration
+
+For SSR frameworks like Next.js:
+
+```tsx
+import { HydrationBoundary, dehydrate } from '@tanstack/react-query'
+
+// Server-side
+export async function getServerSideProps() {
+  const queryClient = new QueryClient()
+  
+  await queryClient.prefetchQuery({
+    queryKey: ['todos'],
+    queryFn: fetchTodos,
+  })
+
+  return {
+    props: {
+      dehydratedState: dehydrate(queryClient),
+    },
+  }
+}
+
+// Client-side
+function MyApp({ dehydratedState }) {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <HydrationBoundary state={dehydratedState}>
+        <YourApp />
+      </HydrationBoundary>
+    </QueryClientProvider>
+  )
+}
+```
+
+## TypeScript
+
+Full TypeScript support with type inference:
+
+```tsx
+interface Todo {
+  id: number
+  title: string
+  completed: boolean
+}
+
+function Todos() {
+  const { data } = useQuery({
+    queryKey: ['todos'],
+    queryFn: async (): Promise<Todo[]> => {
+      const res = await fetch('/api/todos')
+      return res.json()
+    },
+  })
+  
+  // data is typed as Todo[] | undefined
+  return <div>{data?.length} todos</div>
+}
+```
+
+## React-Specific Features
+
+### Automatic Request Cancellation
+
+React Query automatically cancels outgoing requests when components unmount:
+
+```tsx
+function SearchResults({ query }) {
+  const { data } = useQuery({
+    queryKey: ['search', query],
+    queryFn: async ({ signal }) => {
+      // Pass the AbortSignal to fetch
+      const res = await fetch(`/api/search?q=${query}`, { signal })
+      return res.json()
+    },
+  })
+  
+  return <div>{/* results */}</div>
+}
+```
+
+<Tip>
+The `signal` parameter in `queryFn` is automatically provided and will abort the request if the component unmounts or the query is cancelled.
+</Tip>
+
+### Window Focus Refetching
+
+Queries automatically refetch when the window regains focus:
+
+```tsx
+const { data } = useQuery({
+  queryKey: ['todos'],
+  queryFn: fetchTodos,
+  refetchOnWindowFocus: true, // default
+})
+```
+
+### useMutationState
+
+Access the state of all mutations:
+
+```tsx
+import { useMutationState } from '@tanstack/react-query'
+
+function GlobalLoadingIndicator() {
+  const pendingMutations = useMutationState({
+    filters: { status: 'pending' },
+  })
+
+  if (pendingMutations.length === 0) return null
+  
+  return <div>Saving {pendingMutations.length} changes...</div>
+}
+```
+
+## Performance Optimization
+
+### Structural Sharing
+
+React Query automatically uses structural sharing to minimize re-renders:
+
+```tsx
+const { data } = useQuery({
+  queryKey: ['todos'],
+  queryFn: fetchTodos,
+  // Structural sharing is enabled by default
+  // Only changed objects trigger re-renders
+})
+```
+
+### Select Transformations
+
+Transform data without causing unnecessary re-renders:
+
+```tsx
+const { data } = useQuery({
+  queryKey: ['todos'],
+  queryFn: fetchTodos,
+  select: (data) => data.filter((todo) => !todo.completed),
+  // Only re-renders if the filtered result changes
+})
+```
+
+## Related Resources
+
+- [React Query Devtools](/guides/devtools)
+- [SSR & Next.js Guide](/guides/ssr)
+- [Optimistic Updates](/guides/optimistic-updates)

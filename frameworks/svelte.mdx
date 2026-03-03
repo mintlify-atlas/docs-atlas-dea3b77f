@@ -1,0 +1,567 @@
+---
+title: Svelte
+description: TanStack Query for Svelte - Query functions with Svelte 5 runes support
+---
+
+TanStack Query for Svelte provides query and mutation functions for fetching, caching, and updating asynchronous data in Svelte applications. It includes full support for Svelte 5's new runes.
+
+## Installation
+
+```bash
+npm install @tanstack/svelte-query
+# or
+pnpm add @tanstack/svelte-query
+# or
+yarn add @tanstack/svelte-query
+```
+
+<Note>
+TanStack Svelte Query requires **Svelte 5.25.0 or later**.
+</Note>
+
+## Setup
+
+Wrap your application with `QueryClientProvider`:
+
+```svelte
+<!-- App.svelte -->
+<script>
+  import { QueryClient, QueryClientProvider } from '@tanstack/svelte-query'
+  
+  const queryClient = new QueryClient()
+</script>
+
+<QueryClientProvider client={queryClient}>
+  <YourApp />
+</QueryClientProvider>
+```
+
+## Core Functions
+
+### createQuery
+
+Fetch and cache data with `createQuery`:
+
+```svelte
+<script>
+  import { createQuery } from '@tanstack/svelte-query'
+
+  const query = createQuery(() => ({
+    queryKey: ['todos'],
+    queryFn: async () => {
+      const res = await fetch('/api/todos')
+      return res.json()
+    },
+  }))
+</script>
+
+{#if $query.isLoading}
+  <div>Loading...</div>
+{:else if $query.error}
+  <div>Error: {$query.error.message}</div>
+{:else if $query.data}
+  <ul>
+    {#each $query.data as todo (todo.id)}
+      <li>{todo.title}</li>
+    {/each}
+  </ul>
+{/if}
+```
+
+<Tip>
+Query results are returned as Svelte stores. Use the `$` prefix to access reactive values in your template.
+</Tip>
+
+### Reactive Query Keys
+
+Svelte Query works seamlessly with Svelte's reactive statements:
+
+```svelte
+<script>
+  import { createQuery } from '@tanstack/svelte-query'
+  
+  let todoId = $state(1)
+
+  const query = createQuery(() => ({
+    queryKey: ['todo', todoId],
+    queryFn: async () => {
+      const res = await fetch(`/api/todos/${todoId}`)
+      return res.json()
+    },
+  }))
+</script>
+
+<button onclick={() => todoId++}>Next Todo</button>
+{#if $query.data}
+  <h1>{$query.data.title}</h1>
+{/if}
+```
+
+### createMutation
+
+Perform side effects with mutations:
+
+```svelte
+<script>
+  import { createMutation, useQueryClient } from '@tanstack/svelte-query'
+
+  const queryClient = useQueryClient()
+
+  const mutation = createMutation(() => ({
+    mutationFn: async (newTodo) => {
+      const res = await fetch('/api/todos', {
+        method: 'POST',
+        body: JSON.stringify(newTodo),
+      })
+      return res.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['todos'] })
+    },
+  }))
+
+  function addTodo() {
+    $mutation.mutate({ title: 'New Todo', completed: false })
+  }
+</script>
+
+<button onclick={addTodo} disabled={$mutation.isPending}>
+  {$mutation.isPending ? 'Adding...' : 'Add Todo'}
+</button>
+```
+
+### createInfiniteQuery
+
+Implement infinite scrolling:
+
+```svelte
+<script>
+  import { createInfiniteQuery } from '@tanstack/svelte-query'
+
+  const query = createInfiniteQuery(() => ({
+    queryKey: ['posts'],
+    queryFn: async ({ pageParam = 0 }) => {
+      const res = await fetch(`/api/posts?page=${pageParam}`)
+      return res.json()
+    },
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+    initialPageParam: 0,
+  }))
+</script>
+
+<div>
+  {#each $query.data?.pages ?? [] as page}
+    {#each page.posts as post (post.id)}
+      <div>{post.title}</div>
+    {/each}
+  {/each}
+  
+  <button
+    onclick={() => $query.fetchNextPage()}
+    disabled={!$query.hasNextPage || $query.isFetchingNextPage}
+  >
+    {$query.isFetchingNextPage ? 'Loading...' : 'Load More'}
+  </button>
+</div>
+```
+
+## Svelte 5 Runes Support
+
+### Using $state Rune
+
+Svelte Query integrates seamlessly with Svelte 5's runes:
+
+```svelte
+<script>
+  import { createQuery } from '@tanstack/svelte-query'
+  
+  let filter = $state('')
+  let enabled = $state(false)
+
+  const query = createQuery(() => ({
+    queryKey: ['todos', filter],
+    queryFn: () => fetchTodos(filter),
+    enabled, // Reactive to $state
+  }))
+</script>
+
+<input bind:value={filter} placeholder="Filter todos" />
+<label>
+  <input type="checkbox" bind:checked={enabled} />
+  Enable query
+</label>
+
+{#if $query.data}
+  <div>{$query.data.length} results</div>
+{/if}
+```
+
+### Using $derived Rune
+
+```svelte
+<script>
+  import { createQuery } from '@tanstack/svelte-query'
+  
+  let page = $state(1)
+  let pageSize = $state(10)
+  
+  // Derived values work in query keys
+  let offset = $derived(page * pageSize)
+
+  const query = createQuery(() => ({
+    queryKey: ['posts', { offset, pageSize }],
+    queryFn: () => fetchPosts(offset, pageSize),
+  }))
+</script>
+```
+
+### Using $effect Rune
+
+```svelte
+<script>
+  import { createQuery } from '@tanstack/svelte-query'
+  
+  const query = createQuery(() => ({
+    queryKey: ['todos'],
+    queryFn: fetchTodos,
+  }))
+
+  // React to query state changes
+  $effect(() => {
+    if ($query.isSuccess) {
+      console.log('Query succeeded with data:', $query.data)
+    }
+  })
+</script>
+```
+
+<Note>
+Svelte Query's internal implementation uses Svelte 5 runes (`$state`, `$derived`, `$effect`), providing optimal reactivity and performance.
+</Note>
+
+## Store API
+
+### Accessing Query State
+
+Query results are Svelte stores with a special `.value` property:
+
+```svelte
+<script>
+  import { createQuery } from '@tanstack/svelte-query'
+  
+  const query = createQuery(() => ({
+    queryKey: ['todos'],
+    queryFn: fetchTodos,
+  }))
+
+  // Access via store subscription
+  $: console.log($query.data)
+  
+  // Or access .value property directly
+  console.log(query.value.data)
+</script>
+```
+
+### Derived Stores
+
+Create derived stores from query results:
+
+```svelte
+<script>
+  import { createQuery } from '@tanstack/svelte-query'
+  import { derived } from 'svelte/store'
+  
+  const todosQuery = createQuery(() => ({
+    queryKey: ['todos'],
+    queryFn: fetchTodos,
+  }))
+
+  const completedTodos = derived(
+    todosQuery,
+    ($query) => $query.data?.filter(t => t.completed) ?? []
+  )
+</script>
+
+<div>Completed: {$completedTodos.length}</div>
+```
+
+## Advanced Features
+
+### createQueries
+
+Execute multiple queries in parallel:
+
+```svelte
+<script>
+  import { createQueries } from '@tanstack/svelte-query'
+  
+  let userIds = $state([1, 2, 3])
+
+  const queries = createQueries(() => ({
+    queries: userIds.map((id) => ({
+      queryKey: ['user', id],
+      queryFn: () => fetchUser(id),
+    })),
+  }))
+</script>
+
+{#each $queries as query}
+  {#if query.data}
+    <div>{query.data.name}</div>
+  {/if}
+{/each}
+```
+
+### Query Options Factory
+
+```ts
+import { queryOptions } from '@tanstack/svelte-query'
+
+export const todoQueries = {
+  all: () => queryOptions({
+    queryKey: ['todos'],
+    queryFn: fetchTodos,
+  }),
+  detail: (id: number) => queryOptions({
+    queryKey: ['todos', id],
+    queryFn: () => fetchTodo(id),
+  }),
+}
+
+// Usage
+const query = createQuery(() => todoQueries.detail(1))
+```
+
+### useMutationState
+
+Track all mutations globally:
+
+```svelte
+<script>
+  import { useMutationState } from '@tanstack/svelte-query'
+
+  const mutations = useMutationState(() => ({
+    filters: { status: 'pending' },
+  }))
+</script>
+
+{#if $mutations.length > 0}
+  <div>Saving {$mutations.length} changes...</div>
+{/if}
+```
+
+### useIsFetching
+
+Show a global loading indicator:
+
+```svelte
+<script>
+  import { useIsFetching } from '@tanstack/svelte-query'
+
+  const isFetching = useIsFetching()
+</script>
+
+{#if $isFetching}
+  <div class="loading-bar">Loading...</div>
+{/if}
+```
+
+## HydrationBoundary
+
+For SSR with SvelteKit:
+
+```svelte
+<!-- +layout.svelte -->
+<script>
+  import { QueryClient, QueryClientProvider } from '@tanstack/svelte-query'
+  import { browser } from '$app/environment'
+  
+  let { data, children } = $props()
+  
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        enabled: browser,
+      },
+    },
+  })
+</script>
+
+<QueryClientProvider client={queryClient}>
+  <HydrationBoundary state={data.dehydratedState}>
+    {@render children()}
+  </HydrationBoundary>
+</QueryClientProvider>
+```
+
+## TypeScript
+
+Full TypeScript support:
+
+```svelte
+<script lang="ts">
+  import { createQuery } from '@tanstack/svelte-query'
+
+  interface Todo {
+    id: number
+    title: string
+    completed: boolean
+  }
+
+  const query = createQuery(() => ({
+    queryKey: ['todos'],
+    queryFn: async (): Promise<Todo[]> => {
+      const res = await fetch('/api/todos')
+      return res.json()
+    },
+  }))
+
+  // $query.data is typed as Todo[] | undefined
+</script>
+```
+
+## Context API
+
+Access the QueryClient in nested components:
+
+```svelte
+<script>
+  import { useQueryClient } from '@tanstack/svelte-query'
+  
+  const queryClient = useQueryClient()
+  
+  function refreshAll() {
+    queryClient.invalidateQueries()
+  }
+</script>
+
+<button onclick={refreshAll}>Refresh All</button>
+```
+
+## Svelte-Specific Patterns
+
+### Reactive Queries with Stores
+
+```svelte
+<script>
+  import { writable } from 'svelte/store'
+  import { createQuery } from '@tanstack/svelte-query'
+  
+  const searchTerm = writable('')
+  
+  let searchValue = $state('')
+  $: searchTerm.set(searchValue)
+
+  const query = createQuery(() => ({
+    queryKey: ['search', searchValue],
+    queryFn: () => search(searchValue),
+    enabled: searchValue.length > 0,
+  }))
+</script>
+
+<input bind:value={searchValue} />
+```
+
+### Component Props Reactivity
+
+```svelte
+<script>
+  import { createQuery } from '@tanstack/svelte-query'
+  
+  let { userId } = $props()
+
+  const query = createQuery(() => ({
+    queryKey: ['user', userId],
+    queryFn: () => fetchUser(userId),
+  }))
+</script>
+
+{#if $query.data}
+  <h1>{$query.data.name}</h1>
+{/if}
+```
+
+<Tip>
+When using props in queries, always wrap the options in a function `() => ({ ... })` to ensure reactivity.
+</Tip>
+
+## Migration from Svelte 4
+
+Svelte 5 brings significant changes to reactivity:
+
+<Tabs>
+  <Tab title="Svelte 5 (Runes)">
+```svelte
+<script>
+  import { createQuery } from '@tanstack/svelte-query'
+  
+  let filter = $state('')
+  
+  const query = createQuery(() => ({
+    queryKey: ['todos', filter],
+    queryFn: () => fetchTodos(filter),
+  }))
+</script>
+```
+  </Tab>
+  <Tab title="Svelte 4 (Reactive Statements)">
+```svelte
+<script>
+  import { createQuery } from '@tanstack/svelte-query'
+  
+  let filter = ''
+  
+  $: query = createQuery(() => ({
+    queryKey: ['todos', filter],
+    queryFn: () => fetchTodos(filter),
+  }))
+</script>
+```
+  </Tab>
+</Tabs>
+
+## Performance Tips
+
+### Avoid Recreating Queries
+
+```svelte
+<script>
+  import { createQuery } from '@tanstack/svelte-query'
+  
+  let id = $state(1)
+  
+  // ✅ Correct - Query created once, options reactive
+  const query = createQuery(() => ({
+    queryKey: ['todo', id],
+    queryFn: () => fetchTodo(id),
+  }))
+  
+  // ❌ Wrong - Creates new query on every id change
+  // $: query = createQuery(() => ({ ... }))
+</script>
+```
+
+### Use Query Key Factories
+
+```ts
+// queries.ts
+export const queries = {
+  todos: {
+    all: () => ['todos'],
+    detail: (id: number) => ['todos', id],
+    filtered: (filter: string) => ['todos', { filter }],
+  },
+}
+
+// Component.svelte
+const query = createQuery(() => ({
+  queryKey: queries.todos.filtered(filter),
+  queryFn: () => fetchTodos(filter),
+}))
+```
+
+## Related Resources
+
+- [Svelte Query Devtools](/guides/devtools)
+- [SvelteKit SSR Guide](/guides/ssr)
+- [Svelte 5 Documentation](https://svelte.dev/docs/svelte/overview)

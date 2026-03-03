@@ -1,0 +1,478 @@
+---
+title: Server-Side Rendering (SSR)
+description: Use TanStack Query with SSR frameworks like Next.js, Remix, and SvelteKit
+---
+
+TanStack Query supports server-side rendering (SSR) through dehydration and hydration. This allows you to prefetch data on the server and seamlessly transfer it to the client.
+
+## Core Concepts
+
+### Dehydration
+
+**Dehydrate** converts the QueryClient state to a serializable format on the server:
+
+```tsx
+import { dehydrate } from '@tanstack/react-query'
+
+const dehydratedState = dehydrate(queryClient)
+```
+
+### Hydration
+
+**Hydrate** restores the dehydrated state on the client:
+
+```tsx
+import { hydrate } from '@tanstack/react-query'
+
+hydrate(queryClient, dehydratedState)
+```
+
+## Next.js App Router
+
+### Server Component (Prefetching)
+
+```tsx
+// app/posts/page.tsx
+import {
+  dehydrate,
+  HydrationBoundary,
+  QueryClient,
+} from '@tanstack/react-query'
+import { PostList } from './post-list'
+
+async function getPosts() {
+  const res = await fetch('https://api.example.com/posts')
+  return res.json()
+}
+
+export default async function PostsPage() {
+  const queryClient = new QueryClient()
+
+  // Prefetch on the server
+  await queryClient.prefetchQuery({
+    queryKey: ['posts'],
+    queryFn: getPosts,
+  })
+
+  return (
+    <HydrationBoundary state={dehydrate(queryClient)}>
+      <PostList />
+    </HydrationBoundary>
+  )
+}
+```
+
+### Client Component (Consuming)
+
+```tsx
+// app/posts/post-list.tsx
+'use client'
+
+import { useQuery } from '@tanstack/react-query'
+
+export function PostList() {
+  // This will use the prefetched data from the server
+  const { data } = useQuery({
+    queryKey: ['posts'],
+    queryFn: async () => {
+      const res = await fetch('https://api.example.com/posts')
+      return res.json()
+    },
+  })
+
+  return (
+    <ul>
+      {data.map((post) => (
+        <li key={post.id}>{post.title}</li>
+      ))}
+    </ul>
+  )
+}
+```
+
+### Root Layout Setup
+
+```tsx
+// app/layout.tsx
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
+
+export default function RootLayout({ children }) {
+  const [queryClient] = useState(
+    () => new QueryClient({
+      defaultOptions: {
+        queries: {
+          // With SSR, we usually want to set some default staleTime
+          // above 0 to avoid refetching immediately on the client
+          staleTime: 60 * 1000,
+        },
+      },
+    })
+  )
+
+  return (
+    <html>
+      <body>
+        <QueryClientProvider client={queryClient}>
+          {children}
+          <ReactQueryDevtools initialIsOpen={false} />
+        </QueryClientProvider>
+      </body>
+    </html>
+  )
+}
+```
+
+<Tip>
+Set a `staleTime` in SSR apps to prevent immediate refetching on the client. The prefetched data is usually fresh enough for initial render.
+</Tip>
+
+## Next.js Pages Router
+
+```tsx
+// pages/posts.tsx
+import { dehydrate, QueryClient, useQuery } from '@tanstack/react-query'
+
+export async function getServerSideProps() {
+  const queryClient = new QueryClient()
+
+  await queryClient.prefetchQuery({
+    queryKey: ['posts'],
+    queryFn: fetchPosts,
+  })
+
+  return {
+    props: {
+      dehydratedState: dehydrate(queryClient),
+    },
+  }
+}
+
+function Posts() {
+  const { data } = useQuery({
+    queryKey: ['posts'],
+    queryFn: fetchPosts,
+  })
+
+  return (
+    <ul>
+      {data.map((post) => (
+        <li key={post.id}>{post.title}</li>
+      ))}
+    </ul>
+  )
+}
+
+export default Posts
+```
+
+### _app.tsx Setup
+
+```tsx
+// pages/_app.tsx
+import { QueryClient, QueryClientProvider, Hydrate } from '@tanstack/react-query'
+import { useState } from 'react'
+
+export default function MyApp({ Component, pageProps }) {
+  const [queryClient] = useState(() => new QueryClient())
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <Hydrate state={pageProps.dehydratedState}>
+        <Component {...pageProps} />
+      </Hydrate>
+    </QueryClientProvider>
+  )
+}
+```
+
+## Remix
+
+```tsx
+// routes/posts.tsx
+import { json } from '@remix-run/node'
+import { useLoaderData } from '@remix-run/react'
+import { dehydrate, QueryClient, useQuery } from '@tanstack/react-query'
+
+export async function loader() {
+  const queryClient = new QueryClient()
+
+  await queryClient.prefetchQuery({
+    queryKey: ['posts'],
+    queryFn: fetchPosts,
+  })
+
+  return json({ dehydratedState: dehydrate(queryClient) })
+}
+
+export default function Posts() {
+  const { dehydratedState } = useLoaderData<typeof loader>()
+  
+  const { data } = useQuery({
+    queryKey: ['posts'],
+    queryFn: fetchPosts,
+  })
+
+  return (
+    <ul>
+      {data.map((post) => (
+        <li key={post.id}>{post.title}</li>
+      ))}
+    </ul>
+  )
+}
+```
+
+## Dehydrate Options
+
+Customize what gets dehydrated:
+
+```tsx
+const dehydratedState = dehydrate(queryClient, {
+  // Only include successful queries (default behavior)
+  shouldDehydrateQuery: (query) => {
+    return query.state.status === 'success'
+  },
+  
+  // Optionally include mutations
+  shouldDehydrateMutation: (mutation) => {
+    return mutation.state.isPaused
+  },
+  
+  // Transform data before serialization
+  serializeData: (data) => {
+    // e.g., convert Dates to strings
+    return JSON.parse(JSON.stringify(data))
+  },
+})
+```
+
+### Custom Dehydration Rules
+
+```tsx
+// Only dehydrate queries that are less than 30 seconds old
+dehydrate(queryClient, {
+  shouldDehydrateQuery: (query) => {
+    const isSuccess = query.state.status === 'success'
+    const dataAge = Date.now() - query.state.dataUpdatedAt
+    const isFresh = dataAge < 30 * 1000
+    return isSuccess && isFresh
+  },
+})
+```
+
+## Hydrate Options
+
+Customize hydration on the client:
+
+```tsx
+hydrate(queryClient, dehydratedState, {
+  defaultOptions: {
+    queries: {
+      staleTime: 60 * 1000,
+    },
+  },
+  // Transform data after deserialization
+  deserializeData: (data) => {
+    // e.g., convert strings back to Dates
+    return data
+  },
+})
+```
+
+## Streaming with Suspense
+
+Next.js App Router supports streaming with React Server Components:
+
+```tsx
+import { dehydrate, HydrationBoundary, QueryClient } from '@tanstack/react-query'
+import { Suspense } from 'react'
+
+export default async function Page() {
+  const queryClient = new QueryClient()
+
+  // Prefetch critical data
+  await queryClient.prefetchQuery({
+    queryKey: ['critical-data'],
+    queryFn: getCriticalData,
+  })
+
+  return (
+    <HydrationBoundary state={dehydrate(queryClient)}>
+      <CriticalContent />
+      
+      <Suspense fallback={<div>Loading...</div>}>
+        <DeferredContent />
+      </Suspense>
+    </HydrationBoundary>
+  )
+}
+```
+
+## Handling Errors in SSR
+
+```tsx
+export async function getServerSideProps() {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        // Don't retry on the server
+        retry: false,
+      },
+    },
+  })
+
+  try {
+    await queryClient.prefetchQuery({
+      queryKey: ['posts'],
+      queryFn: fetchPosts,
+    })
+  } catch (error) {
+    // Handle error - maybe return 404 or error page
+    return {
+      notFound: true,
+    }
+  }
+
+  return {
+    props: {
+      dehydratedState: dehydrate(queryClient),
+    },
+  }
+}
+```
+
+<Warning>
+Queries will **not** refetch on mount if they have fresh data from SSR. Set `staleTime: 0` if you need immediate refetching, but this defeats the purpose of SSR.
+</Warning>
+
+## Prefetching Multiple Queries
+
+```tsx
+export async function getServerSideProps() {
+  const queryClient = new QueryClient()
+
+  // Prefetch in parallel
+  await Promise.all([
+    queryClient.prefetchQuery({
+      queryKey: ['posts'],
+      queryFn: fetchPosts,
+    }),
+    queryClient.prefetchQuery({
+      queryKey: ['user'],
+      queryFn: fetchUser,
+    }),
+    queryClient.prefetchQuery({
+      queryKey: ['comments'],
+      queryFn: fetchComments,
+    }),
+  ])
+
+  return {
+    props: {
+      dehydratedState: dehydrate(queryClient),
+    },
+  }
+}
+```
+
+## Prefetching Infinite Queries
+
+```tsx
+import { dehydrate, QueryClient } from '@tanstack/react-query'
+
+export async function getServerSideProps() {
+  const queryClient = new QueryClient()
+
+  await queryClient.prefetchInfiniteQuery({
+    queryKey: ['posts'],
+    queryFn: ({ pageParam = 0 }) => fetchPosts(pageParam),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+    pages: 3, // Prefetch first 3 pages
+  })
+
+  return {
+    props: {
+      dehydratedState: dehydrate(queryClient),
+    },
+  }
+}
+```
+
+## Common Pitfalls
+
+### 1. Not Setting staleTime
+
+```tsx
+// ❌ Bad - Will refetch immediately on client
+const queryClient = new QueryClient()
+
+// ✅ Good - Respects SSR data for 60 seconds
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 60 * 1000,
+    },
+  },
+})
+```
+
+### 2. Creating QueryClient Inside Component
+
+```tsx
+// ❌ Bad - Creates new client on each render
+function App() {
+  const queryClient = new QueryClient()
+  return <QueryClientProvider client={queryClient}>...</QueryClientProvider>
+}
+
+// ✅ Good - Stable client instance
+function App() {
+  const [queryClient] = useState(() => new QueryClient())
+  return <QueryClientProvider client={queryClient}>...</QueryClientProvider>
+}
+```
+
+### 3. Query Key Mismatch
+
+```tsx
+// ❌ Bad - Keys don't match
+await queryClient.prefetchQuery({ queryKey: ['posts'], queryFn: fetchPosts })
+const { data } = useQuery({ queryKey: ['posts', 'all'], queryFn: fetchPosts })
+
+// ✅ Good - Keys match exactly
+await queryClient.prefetchQuery({ queryKey: ['posts'], queryFn: fetchPosts })
+const { data } = useQuery({ queryKey: ['posts'], queryFn: fetchPosts })
+```
+
+## Testing SSR
+
+```tsx
+import { renderToString } from 'react-dom/server'
+import { QueryClient, QueryClientProvider, dehydrate } from '@tanstack/react-query'
+
+test('should render on server', async () => {
+  const queryClient = new QueryClient()
+  
+  await queryClient.prefetchQuery({
+    queryKey: ['test'],
+    queryFn: () => Promise.resolve('data'),
+  })
+  
+  const dehydratedState = dehydrate(queryClient)
+  
+  const markup = renderToString(
+    <QueryClientProvider client={queryClient}>
+      <App />
+    </QueryClientProvider>
+  )
+  
+  expect(markup).toContain('data')
+  expect(dehydratedState.queries).toHaveLength(1)
+})
+```
+
+## Next Steps
+
+- [Prefetching](/guides/prefetching) - Advanced prefetching patterns

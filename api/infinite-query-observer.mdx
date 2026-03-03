@@ -1,0 +1,370 @@
+---
+title: InfiniteQueryObserver
+description: The InfiniteQueryObserver extends QueryObserver for infinite query patterns.
+---
+
+The `InfiniteQueryObserver` extends `QueryObserver` to provide additional functionality for infinite queries (pagination). It powers hooks like `useInfiniteQuery`.
+
+## Constructor
+
+Creates a new InfiniteQueryObserver instance.
+
+```ts
+const observer = new InfiniteQueryObserver<TQueryFnData, TError, TData, TQueryKey, TPageParam>(
+  client: QueryClient,
+  options: InfiniteQueryObserverOptions<TQueryFnData, TError, TData, TQueryKey, TPageParam>
+)
+```
+
+<ParamField path="client" type="QueryClient" required>
+  The QueryClient instance to use.
+</ParamField>
+
+<ParamField path="options" type="InfiniteQueryObserverOptions" required>
+  Options for the infinite query observer.
+  
+  <Expandable title="properties">
+    <ParamField path="queryKey" type="QueryKey" required>
+      A unique key for the query.
+    </ParamField>
+    
+    <ParamField path="queryFn" type="QueryFunction" required>
+      The function that fetches pages. Receives a context object with `pageParam`.
+    </ParamField>
+    
+    <ParamField path="initialPageParam" type="TPageParam" required>
+      The default page param to use when fetching the first page.
+    </ParamField>
+    
+    <ParamField path="getNextPageParam" type="(lastPage: TQueryFnData, allPages: TQueryFnData[], lastPageParam: TPageParam, allPageParams: TPageParam[]) => TPageParam | undefined" required>
+      Function to get the next page param. Return `undefined` to indicate no more pages.
+    </ParamField>
+    
+    <ParamField path="getPreviousPageParam" type="(firstPage: TQueryFnData, allPages: TQueryFnData[], firstPageParam: TPageParam, allPageParams: TPageParam[]) => TPageParam | undefined" optional>
+      Function to get the previous page param. Return `undefined` to indicate no more pages.
+    </ParamField>
+    
+    <ParamField path="maxPages" type="number" optional>
+      Maximum number of pages to keep in the cache.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+### Example
+
+```ts
+import { InfiniteQueryObserver } from '@tanstack/query-core'
+
+const observer = new InfiniteQueryObserver(queryClient, {
+  queryKey: ['projects'],
+  queryFn: async ({ pageParam }) => {
+    const response = await fetch(`/api/projects?cursor=${pageParam}`)
+    return response.json()
+  },
+  initialPageParam: 0,
+  getNextPageParam: (lastPage, allPages, lastPageParam) => lastPage.nextCursor,
+  getPreviousPageParam: (firstPage, allPages, firstPageParam) => firstPage.prevCursor,
+})
+```
+
+## Methods
+
+InfiniteQueryObserver inherits all methods from `QueryObserver` and adds the following:
+
+### fetchNextPage
+
+Fetches the next page of data.
+
+```ts
+fetchNextPage(
+  options?: FetchNextPageOptions
+): Promise<InfiniteQueryObserverResult<TData, TError>>
+```
+
+<ParamField path="options" type="FetchNextPageOptions" optional>
+  Options for fetching the next page.
+  
+  <Expandable title="properties">
+    <ParamField path="cancelRefetch" type="boolean" optional>
+      Whether to cancel any ongoing refetch. Default is true.
+    </ParamField>
+    
+    <ParamField path="throwOnError" type="boolean" optional>
+      Whether to throw errors.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ResponseField name="Promise<InfiniteQueryObserverResult>" type="Promise">
+  Returns a promise that resolves with the infinite query result.
+</ResponseField>
+
+#### Example
+
+```ts
+const result = await observer.fetchNextPage()
+console.log('Has next page:', result.hasNextPage)
+console.log('All pages:', result.data.pages)
+```
+
+### fetchPreviousPage
+
+Fetches the previous page of data.
+
+```ts
+fetchPreviousPage(
+  options?: FetchPreviousPageOptions
+): Promise<InfiniteQueryObserverResult<TData, TError>>
+```
+
+<ParamField path="options" type="FetchPreviousPageOptions" optional>
+  Options for fetching the previous page.
+  
+  <Expandable title="properties">
+    <ParamField path="cancelRefetch" type="boolean" optional>
+      Whether to cancel any ongoing refetch. Default is true.
+    </ParamField>
+    
+    <ParamField path="throwOnError" type="boolean" optional>
+      Whether to throw errors.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ResponseField name="Promise<InfiniteQueryObserverResult>" type="Promise">
+  Returns a promise that resolves with the infinite query result.
+</ResponseField>
+
+#### Example
+
+```ts
+const result = await observer.fetchPreviousPage()
+console.log('Has previous page:', result.hasPreviousPage)
+```
+
+### subscribe
+
+Subscribes to the observer. Same as QueryObserver but with InfiniteQueryObserverResult.
+
+```ts
+subscribe(
+  listener: (result: InfiniteQueryObserverResult<TData, TError>) => void
+): () => void
+```
+
+<ParamField path="listener" type="(result: InfiniteQueryObserverResult<TData, TError>) => void" required>
+  Function called when the query result changes.
+</ParamField>
+
+<ResponseField name="() => void" type="function">
+  Returns an unsubscribe function.
+</ResponseField>
+
+#### Example
+
+```ts
+const unsubscribe = observer.subscribe((result) => {
+  console.log('Pages:', result.data?.pages)
+  console.log('Page params:', result.data?.pageParams)
+  console.log('Has next page:', result.hasNextPage)
+  console.log('Has previous page:', result.hasPreviousPage)
+  console.log('Is fetching next page:', result.isFetchingNextPage)
+})
+
+unsubscribe()
+```
+
+### getCurrentResult
+
+Returns the current infinite query result.
+
+```ts
+getCurrentResult(): InfiniteQueryObserverResult<TData, TError>
+```
+
+<ResponseField name="InfiniteQueryObserverResult" type="InfiniteQueryObserverResult">
+  Returns the current infinite query result.
+  
+  <Expandable title="properties">
+    <ResponseField name="data" type="InfiniteData<TData, TPageParam> | undefined">
+      The infinite data structure containing pages and pageParams.
+      
+      <Expandable title="properties">
+        <ResponseField name="pages" type="TData[]">
+          Array of pages that have been fetched.
+        </ResponseField>
+        
+        <ResponseField name="pageParams" type="TPageParam[]">
+          Array of page params corresponding to each page.
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="error" type="TError | null">
+      The error object if the query failed.
+    </ResponseField>
+    
+    <ResponseField name="status" type="'pending' | 'error' | 'success'">
+      The status of the query.
+    </ResponseField>
+    
+    <ResponseField name="hasNextPage" type="boolean">
+      True if there is a next page to fetch.
+    </ResponseField>
+    
+    <ResponseField name="hasPreviousPage" type="boolean">
+      True if there is a previous page to fetch.
+    </ResponseField>
+    
+    <ResponseField name="isFetchingNextPage" type="boolean">
+      True if currently fetching the next page.
+    </ResponseField>
+    
+    <ResponseField name="isFetchingPreviousPage" type="boolean">
+      True if currently fetching the previous page.
+    </ResponseField>
+    
+    <ResponseField name="isFetchNextPageError" type="boolean">
+      True if there was an error fetching the next page.
+    </ResponseField>
+    
+    <ResponseField name="isFetchPreviousPageError" type="boolean">
+      True if there was an error fetching the previous page.
+    </ResponseField>
+    
+    <ResponseField name="fetchNextPage" type="(options?: FetchNextPageOptions) => Promise<InfiniteQueryObserverResult>">
+      Function to fetch the next page.
+    </ResponseField>
+    
+    <ResponseField name="fetchPreviousPage" type="(options?: FetchPreviousPageOptions) => Promise<InfiniteQueryObserverResult>">
+      Function to fetch the previous page.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### setOptions
+
+Updates the observer options. Automatically sets the infinite query behavior.
+
+```ts
+setOptions(
+  options: InfiniteQueryObserverOptions<TQueryFnData, TError, TData, TQueryKey, TPageParam>
+): void
+```
+
+<ParamField path="options" type="InfiniteQueryObserverOptions" required>
+  New options for the observer.
+</ParamField>
+
+### getOptimisticResult
+
+Returns an optimistic infinite query result.
+
+```ts
+getOptimisticResult(
+  options: DefaultedInfiniteQueryObserverOptions<TQueryFnData, TError, TData, TQueryKey, TPageParam>
+): InfiniteQueryObserverResult<TData, TError>
+```
+
+## InfiniteData Structure
+
+The data returned by an infinite query has a special structure:
+
+```ts
+interface InfiniteData<TData, TPageParam> {
+  pages: TData[]
+  pageParams: TPageParam[]
+}
+```
+
+### Example
+
+```ts
+const result = observer.getCurrentResult()
+
+if (result.data) {
+  // Access all pages
+  result.data.pages.forEach((page, index) => {
+    console.log(`Page ${index}:`, page)
+    console.log(`Page param:`, result.data.pageParams[index])
+  })
+  
+  // Flatten all items from all pages
+  const allItems = result.data.pages.flatMap(page => page.items)
+}
+```
+
+## Usage Example
+
+Here's a complete example:
+
+```ts
+import { QueryClient, InfiniteQueryObserver } from '@tanstack/query-core'
+
+const queryClient = new QueryClient()
+
+const observer = new InfiniteQueryObserver(queryClient, {
+  queryKey: ['projects'],
+  queryFn: async ({ pageParam }) => {
+    const response = await fetch(
+      `/api/projects?cursor=${pageParam}&limit=10`
+    )
+    return response.json()
+  },
+  initialPageParam: 0,
+  getNextPageParam: (lastPage, allPages, lastPageParam) => {
+    // Return undefined if no more pages
+    return lastPage.nextCursor ?? undefined
+  },
+  getPreviousPageParam: (firstPage, allPages, firstPageParam) => {
+    return firstPage.prevCursor ?? undefined
+  },
+})
+
+const unsubscribe = observer.subscribe((result) => {
+  if (result.isLoading) {
+    console.log('Loading first page...')
+  } else if (result.isError) {
+    console.error('Error:', result.error)
+  } else if (result.isSuccess) {
+    console.log('Total pages loaded:', result.data.pages.length)
+    
+    if (result.hasNextPage && !result.isFetchingNextPage) {
+      // Automatically fetch next page
+      observer.fetchNextPage()
+    }
+  }
+  
+  if (result.isFetchingNextPage) {
+    console.log('Loading more...')
+  }
+})
+
+// Clean up
+unsubscribe()
+observer.destroy()
+```
+
+## Differences from QueryObserver
+
+1. **Data Structure**: Returns `InfiniteData<TData, TPageParam>` instead of `TData`
+2. **Additional Methods**: `fetchNextPage()` and `fetchPreviousPage()`
+3. **Additional Result Properties**: `hasNextPage`, `hasPreviousPage`, `isFetchingNextPage`, etc.
+4. **Required Options**: Requires `initialPageParam`, `getNextPageParam`
+5. **Automatic Behavior**: Automatically applies infinite query behavior
+
+## Page Management
+
+You can control the number of pages kept in memory using the `maxPages` option:
+
+```ts
+const observer = new InfiniteQueryObserver(queryClient, {
+  queryKey: ['projects'],
+  queryFn: fetchProjects,
+  initialPageParam: 0,
+  getNextPageParam: (lastPage) => lastPage.nextCursor,
+  maxPages: 3, // Only keep 3 pages in memory
+})
+```
+
+When `maxPages` is set, the oldest pages will be removed as new pages are fetched.

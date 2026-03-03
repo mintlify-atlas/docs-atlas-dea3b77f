@@ -1,0 +1,574 @@
+---
+title: Testing
+description: Test queries and mutations with React Testing Library and other testing frameworks
+---
+
+Testing queries and mutations requires proper setup of `QueryClientProvider` and handling of async behavior.
+
+## Basic Setup
+
+Wrap your components in a `QueryClientProvider` for testing:
+
+```tsx
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { render, screen } from '@testing-library/react'
+
+function createTestQueryClient() {
+  return new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false, // Disable retries in tests
+      },
+    },
+  })
+}
+
+function renderWithClient(ui: React.ReactElement) {
+  const testQueryClient = createTestQueryClient()
+  const { rerender, ...result } = render(
+    <QueryClientProvider client={testQueryClient}>
+      {ui}
+    </QueryClientProvider>
+  )
+  return {
+    ...result,
+    rerender: (rerenderUi: React.ReactElement) =>
+      rerender(
+        <QueryClientProvider client={testQueryClient}>
+          {rerenderUi}
+        </QueryClientProvider>
+      ),
+  }
+}
+
+test('my query test', async () => {
+  renderWithClient(<MyComponent />)
+  // ... your test
+})
+```
+
+## Testing Queries
+
+### Successful Query
+
+```tsx
+import { renderWithClient } from './test-utils'
+import { screen, waitFor } from '@testing-library/react'
+
+function Posts() {
+  const { data, isLoading } = useQuery({
+    queryKey: ['posts'],
+    queryFn: fetchPosts,
+  })
+
+  if (isLoading) return <div>Loading...</div>
+
+  return (
+    <ul>
+      {data.map((post) => (
+        <li key={post.id}>{post.title}</li>
+      ))}
+    </ul>
+  )
+}
+
+test('should display posts', async () => {
+  // Mock the API
+  global.fetch = vi.fn(() =>
+    Promise.resolve({
+      json: () => Promise.resolve([{ id: 1, title: 'Test Post' }]),
+    })
+  )
+
+  renderWithClient(<Posts />)
+
+  // Wait for loading to finish
+  expect(screen.getByText('Loading...')).toBeInTheDocument()
+
+  // Wait for data to appear
+  await waitFor(() => {
+    expect(screen.getByText('Test Post')).toBeInTheDocument()
+  })
+})
+```
+
+### Query Error
+
+```tsx
+test('should handle error', async () => {
+  // Mock API error
+  global.fetch = vi.fn(() => Promise.reject(new Error('Failed to fetch')))
+
+  renderWithClient(<Posts />)
+
+  await waitFor(() => {
+    expect(screen.getByText(/error/i)).toBeInTheDocument()
+  })
+})
+```
+
+## Testing Mutations
+
+### Successful Mutation
+
+```tsx
+import { renderWithClient } from './test-utils'
+import { screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+
+function CreatePost() {
+  const [title, setTitle] = useState('')
+  const mutation = useMutation({
+    mutationFn: (newPost: { title: string }) => {
+      return fetch('/api/posts', {
+        method: 'POST',
+        body: JSON.stringify(newPost),
+      })
+    },
+  })
+
+  return (
+    <div>
+      <input
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        placeholder="Post title"
+      />
+      <button onClick={() => mutation.mutate({ title })}>Create</button>
+      {mutation.isPending && <div>Creating...</div>}
+      {mutation.isSuccess && <div>Post created!</div>}
+    </div>
+  )
+}
+
+test('should create a post', async () => {
+  const user = userEvent.setup()
+
+  global.fetch = vi.fn(() =>
+    Promise.resolve({
+      json: () => Promise.resolve({ id: 1, title: 'New Post' }),
+    })
+  )
+
+  renderWithClient(<CreatePost />)
+
+  // Type in input
+  await user.type(screen.getByPlaceholderText('Post title'), 'New Post')
+
+  // Click create button
+  await user.click(screen.getByText('Create'))
+
+  // Check pending state
+  expect(screen.getByText('Creating...')).toBeInTheDocument()
+
+  // Wait for success
+  await waitFor(() => {
+    expect(screen.getByText('Post created!')).toBeInTheDocument()
+  })
+
+  // Verify API was called
+  expect(global.fetch).toHaveBeenCalledWith(
+    '/api/posts',
+    expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ title: 'New Post' }),
+    })
+  )
+})
+```
+
+### Mutation Error
+
+```tsx
+test('should handle mutation error', async () => {
+  const user = userEvent.setup()
+
+  global.fetch = vi.fn(() => Promise.reject(new Error('Failed to create')))
+
+  renderWithClient(<CreatePost />)
+
+  await user.type(screen.getByPlaceholderText('Post title'), 'New Post')
+  await user.click(screen.getByText('Create'))
+
+  await waitFor(() => {
+    expect(screen.getByText(/error/i)).toBeInTheDocument()
+  })
+})
+```
+
+## Using MSW (Mock Service Worker)
+
+MSW is recommended for API mocking:
+
+```tsx
+import { rest } from 'msw'
+import { setupServer } from 'msw/node'
+
+const server = setupServer(
+  rest.get('/api/posts', (req, res, ctx) => {
+    return res(
+      ctx.json([
+        { id: 1, title: 'First Post' },
+        { id: 2, title: 'Second Post' },
+      ])
+    )
+  })
+)
+
+beforeAll(() => server.listen())
+afterEach(() => server.resetHandlers())
+afterAll(() => server.close())
+
+test('should display posts', async () => {
+  renderWithClient(<Posts />)
+
+  await waitFor(() => {
+    expect(screen.getByText('First Post')).toBeInTheDocument()
+    expect(screen.getByText('Second Post')).toBeInTheDocument()
+  })
+})
+
+test('should handle server error', async () => {
+  // Override handler for this test
+  server.use(
+    rest.get('/api/posts', (req, res, ctx) => {
+      return res(ctx.status(500))
+    })
+  )
+
+  renderWithClient(<Posts />)
+
+  await waitFor(() => {
+    expect(screen.getByText(/error/i)).toBeInTheDocument()
+  })
+})
+```
+
+## Testing Hooks
+
+Use `renderHook` from React Testing Library:
+
+```tsx
+import { renderHook, waitFor } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+
+function usePosts() {
+  return useQuery({
+    queryKey: ['posts'],
+    queryFn: fetchPosts,
+  })
+}
+
+test('usePosts hook', async () => {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  })
+
+  const wrapper = ({ children }) => (
+    <QueryClientProvider client={queryClient}>
+      {children}
+    </QueryClientProvider>
+  )
+
+  global.fetch = vi.fn(() =>
+    Promise.resolve({
+      json: () => Promise.resolve([{ id: 1, title: 'Test' }]),
+    })
+  )
+
+  const { result } = renderHook(() => usePosts(), { wrapper })
+
+  // Initially loading
+  expect(result.current.isLoading).toBe(true)
+
+  // Wait for success
+  await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+  // Check data
+  expect(result.current.data).toEqual([{ id: 1, title: 'Test' }])
+})
+```
+
+## Testing with Prefetched Data
+
+Set initial data in tests:
+
+```tsx
+test('should use prefetched data', async () => {
+  const queryClient = new QueryClient()
+
+  // Prefetch data
+  queryClient.setQueryData(['posts'], [
+    { id: 1, title: 'Prefetched Post' },
+  ])
+
+  const wrapper = ({ children }) => (
+    <QueryClientProvider client={queryClient}>
+      {children}
+    </QueryClientProvider>
+  )
+
+  render(<Posts />, { wrapper })
+
+  // Data should appear immediately
+  expect(screen.getByText('Prefetched Post')).toBeInTheDocument()
+})
+```
+
+## Testing Optimistic Updates
+
+```tsx
+test('should show optimistic update', async () => {
+  const user = userEvent.setup()
+  const queryClient = new QueryClient()
+
+  // Set initial data
+  queryClient.setQueryData(['todos'], [
+    { id: 1, text: 'Existing Todo' },
+  ])
+
+  const wrapper = ({ children }) => (
+    <QueryClientProvider client={queryClient}>
+      {children}
+    </QueryClientProvider>
+  )
+
+  render(<TodoList />, { wrapper })
+
+  // Add new todo
+  await user.type(screen.getByPlaceholderText('New todo'), 'New Todo')
+  await user.click(screen.getByText('Add'))
+
+  // Should see optimistic update immediately
+  expect(screen.getByText('New Todo')).toBeInTheDocument()
+
+  // Wait for server confirmation
+  await waitFor(() => {
+    expect(global.fetch).toHaveBeenCalled()
+  })
+})
+```
+
+## Testing Query Invalidation
+
+```tsx
+test('should invalidate queries', async () => {
+  const queryClient = new QueryClient()
+  const wrapper = ({ children }) => (
+    <QueryClientProvider client={queryClient}>
+      {children}
+    </QueryClientProvider>
+  )
+
+  const { result } = renderHook(() => usePosts(), { wrapper })
+
+  await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+  // Invalidate
+  queryClient.invalidateQueries({ queryKey: ['posts'] })
+
+  // Should refetch
+  await waitFor(() => expect(result.current.isFetching).toBe(true))
+})
+```
+
+## Testing Suspense Queries
+
+```tsx
+import { Suspense } from 'react'
+
+function PostsWithSuspense() {
+  const { data } = useSuspenseQuery({
+    queryKey: ['posts'],
+    queryFn: fetchPosts,
+  })
+
+  return (
+    <ul>
+      {data.map((post) => (
+        <li key={post.id}>{post.title}</li>
+      ))}
+    </ul>
+  )
+}
+
+test('should render with suspense', async () => {
+  global.fetch = vi.fn(() =>
+    Promise.resolve({
+      json: () => Promise.resolve([{ id: 1, title: 'Test' }]),
+    })
+  )
+
+  renderWithClient(
+    <Suspense fallback={<div>Loading...</div>}>
+      <PostsWithSuspense />
+    </Suspense>
+  )
+
+  expect(screen.getByText('Loading...')).toBeInTheDocument()
+
+  await waitFor(() => {
+    expect(screen.getByText('Test')).toBeInTheDocument()
+  })
+})
+```
+
+## Custom Test Utilities
+
+Create reusable test utilities:
+
+```tsx
+// test-utils.tsx
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { render, renderHook } from '@testing-library/react'
+
+export function createTestQueryClient() {
+  return new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+        gcTime: Infinity,
+      },
+      mutations: {
+        retry: false,
+      },
+    },
+    logger: {
+      log: console.log,
+      warn: console.warn,
+      error: () => {}, // Silence errors in tests
+    },
+  })
+}
+
+export function createWrapper() {
+  const testQueryClient = createTestQueryClient()
+  return ({ children }: { children: React.ReactNode }) => (
+    <QueryClientProvider client={testQueryClient}>
+      {children}
+    </QueryClientProvider>
+  )
+}
+
+export function renderWithClient(ui: React.ReactElement) {
+  const testQueryClient = createTestQueryClient()
+  return render(
+    <QueryClientProvider client={testQueryClient}>
+      {ui}
+    </QueryClientProvider>
+  )
+}
+
+export function renderHookWithClient<TResult, TProps>(
+  hook: (props: TProps) => TResult
+) {
+  return renderHook(hook, { wrapper: createWrapper() })
+}
+```
+
+Usage:
+
+```tsx
+import { renderWithClient, renderHookWithClient } from './test-utils'
+
+test('my test', async () => {
+  renderWithClient(<MyComponent />)
+  // ...
+})
+
+test('my hook test', async () => {
+  const { result } = renderHookWithClient(() => useMyQuery())
+  // ...
+})
+```
+
+## Testing Error Boundaries
+
+```tsx
+import { ErrorBoundary } from 'react-error-boundary'
+
+test('should catch query error in error boundary', async () => {
+  global.fetch = vi.fn(() => Promise.reject(new Error('API Error')))
+
+  renderWithClient(
+    <ErrorBoundary fallback={<div>Error occurred</div>}>
+      <Suspense fallback={<div>Loading...</div>}>
+        <PostsWithSuspense />
+      </Suspense>
+    </ErrorBoundary>
+  )
+
+  await waitFor(() => {
+    expect(screen.getByText('Error occurred')).toBeInTheDocument()
+  })
+})
+```
+
+## Best Practices
+
+1. **Always disable retry** in tests for faster, predictable tests
+2. **Use MSW** for API mocking instead of manual fetch mocks
+3. **Create test utilities** for common setup
+4. **Test all states** - loading, success, error
+5. **Use waitFor** for async assertions
+6. **Mock at the network level** not the query level
+7. **Test user interactions** not implementation details
+
+## Common Pitfalls
+
+### 1. Not Waiting for Async
+
+```tsx
+// ❌ Bad - Doesn't wait for data
+test('bad test', () => {
+  renderWithClient(<Posts />)
+  expect(screen.getByText('Test Post')).toBeInTheDocument()
+})
+
+// ✅ Good - Waits for data
+test('good test', async () => {
+  renderWithClient(<Posts />)
+  await waitFor(() => {
+    expect(screen.getByText('Test Post')).toBeInTheDocument()
+  })
+})
+```
+
+### 2. Shared QueryClient
+
+```tsx
+// ❌ Bad - Shared client causes test pollution
+const queryClient = new QueryClient()
+
+test('test 1', () => {
+  render(
+    <QueryClientProvider client={queryClient}>
+      <App />
+    </QueryClientProvider>
+  )
+})
+
+// ✅ Good - Fresh client for each test
+test('test 2', () => {
+  const queryClient = new QueryClient()
+  render(
+    <QueryClientProvider client={queryClient}>
+      <App />
+    </QueryClientProvider>
+  )
+})
+```
+
+### 3. Not Cleaning Up
+
+```tsx
+// ✅ Clean up after each test
+afterEach(() => {
+  vi.clearAllMocks()
+})
+```
+
+## Next Steps
+
+- [DevTools](/guides/devtools) - Debug queries during development
+- [Mutations](/concepts/mutations) - Learn more about mutations

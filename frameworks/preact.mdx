@@ -1,0 +1,553 @@
+---
+title: Preact
+description: TanStack Query for Preact - Hooks for managing server state
+---
+
+TanStack Query for Preact provides hooks for fetching, caching, and updating asynchronous data in your Preact applications. The API is nearly identical to React Query.
+
+## Installation
+
+```bash
+npm install @tanstack/preact-query
+# or
+pnpm add @tanstack/preact-query
+# or
+yarn add @tanstack/preact-query
+```
+
+## Setup
+
+Wrap your application with `QueryClientProvider`:
+
+```tsx
+import { QueryClient, QueryClientProvider } from '@tanstack/preact-query'
+import { render } from 'preact'
+import App from './App'
+
+const queryClient = new QueryClient()
+
+render(
+  <QueryClientProvider client={queryClient}>
+    <App />
+  </QueryClientProvider>,
+  document.getElementById('root')!
+)
+```
+
+## Core Hooks
+
+### useQuery
+
+Fetch and cache data with the `useQuery` hook:
+
+```tsx
+import { useQuery } from '@tanstack/preact-query'
+
+function Todos() {
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['todos'],
+    queryFn: async () => {
+      const res = await fetch('/api/todos')
+      return res.json()
+    },
+  })
+
+  if (isLoading) return <div>Loading...</div>
+  if (error) return <div>Error: {error.message}</div>
+
+  return (
+    <ul>
+      {data.map((todo) => (
+        <li key={todo.id}>{todo.title}</li>
+      ))}
+    </ul>
+  )
+}
+```
+
+### useMutation
+
+Perform side effects with mutations:
+
+```tsx
+import { useMutation, useQueryClient } from '@tanstack/preact-query'
+
+function AddTodo() {
+  const queryClient = useQueryClient()
+  
+  const mutation = useMutation({
+    mutationFn: async (newTodo) => {
+      const res = await fetch('/api/todos', {
+        method: 'POST',
+        body: JSON.stringify(newTodo),
+      })
+      return res.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['todos'] })
+    },
+  })
+
+  return (
+    <button onClick={() => mutation.mutate({ title: 'New Todo' })}>
+      {mutation.isPending ? 'Adding...' : 'Add Todo'}
+    </button>
+  )
+}
+```
+
+### useInfiniteQuery
+
+Implement infinite scrolling:
+
+```tsx
+import { useInfiniteQuery } from '@tanstack/preact-query'
+
+function Posts() {
+  const {
+    data,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
+    queryKey: ['posts'],
+    queryFn: async ({ pageParam = 0 }) => {
+      const res = await fetch(`/api/posts?page=${pageParam}`)
+      return res.json()
+    },
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+    initialPageParam: 0,
+  })
+
+  return (
+    <div>
+      {data?.pages.map((page) => (
+        page.posts.map((post) => <Post key={post.id} post={post} />)
+      ))}
+      <button
+        onClick={() => fetchNextPage()}
+        disabled={!hasNextPage || isFetchingNextPage}
+      >
+        {isFetchingNextPage ? 'Loading...' : 'Load More'}
+      </button>
+    </div>
+  )
+}
+```
+
+## Suspense Support
+
+### useSuspenseQuery
+
+Preact Query has full support for Suspense:
+
+```tsx
+import { Suspense } from 'preact/compat'
+import { useSuspenseQuery } from '@tanstack/preact-query'
+
+function TodoList() {
+  const { data } = useSuspenseQuery({
+    queryKey: ['todos'],
+    queryFn: fetchTodos,
+  })
+
+  return (
+    <ul>
+      {data.map((todo) => (
+        <li key={todo.id}>{todo.title}</li>
+      ))}
+    </ul>
+  )
+}
+
+function App() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <TodoList />
+    </Suspense>
+  )
+}
+```
+
+<Note>
+Use `preact/compat` to access Suspense features. The API is identical to React's Suspense.
+</Note>
+
+### useSuspenseInfiniteQuery
+
+```tsx
+import { Suspense } from 'preact/compat'
+import { useSuspenseInfiniteQuery } from '@tanstack/preact-query'
+
+function InfinitePosts() {
+  const { data, fetchNextPage, hasNextPage } = useSuspenseInfiniteQuery({
+    queryKey: ['posts'],
+    queryFn: ({ pageParam = 0 }) => fetchPosts(pageParam),
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+    initialPageParam: 0,
+  })
+
+  return <PostList data={data} onLoadMore={fetchNextPage} />
+}
+
+function App() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <InfinitePosts />
+    </Suspense>
+  )
+}
+```
+
+## Advanced Features
+
+### useQueries
+
+Execute multiple queries in parallel:
+
+```tsx
+import { useQueries } from '@tanstack/preact-query'
+
+function UserData({ userIds }) {
+  const results = useQueries({
+    queries: userIds.map((id) => ({
+      queryKey: ['user', id],
+      queryFn: () => fetchUser(id),
+    })),
+  })
+
+  const isLoading = results.some((result) => result.isLoading)
+  
+  return <div>{/* render results */}</div>
+}
+```
+
+### Query Options Factory
+
+```tsx
+import { queryOptions, useQuery } from '@tanstack/preact-query'
+
+const todoQueries = {
+  all: () => queryOptions({
+    queryKey: ['todos'],
+    queryFn: fetchTodos,
+  }),
+  detail: (id: number) => queryOptions({
+    queryKey: ['todos', id],
+    queryFn: () => fetchTodo(id),
+  }),
+}
+
+function TodoDetail({ id }) {
+  const { data } = useQuery(todoQueries.detail(id))
+  return <div>{data.title}</div>
+}
+```
+
+### Error Boundaries
+
+```tsx
+import { QueryErrorResetBoundary } from '@tanstack/preact-query'
+import { ErrorBoundary } from 'preact-error-boundary'
+
+function App() {
+  return (
+    <QueryErrorResetBoundary>
+      {({ reset }) => (
+        <ErrorBoundary
+          onReset={reset}
+          fallback={(error, resetError) => (
+            <div>
+              Error: {error.message}
+              <button onClick={resetError}>Try again</button>
+            </div>
+          )}
+        >
+          <YourApp />
+        </ErrorBoundary>
+      )}
+    </QueryErrorResetBoundary>
+  )
+}
+```
+
+## Preact-Specific Considerations
+
+### Size Optimization
+
+Preact Query is optimized for small bundle sizes, perfect for Preact's lightweight philosophy:
+
+```tsx
+import { QueryClient, QueryClientProvider } from '@tanstack/preact-query'
+
+// Minimal configuration for smallest bundle
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: false,
+      refetchOnWindowFocus: false,
+    },
+  },
+})
+```
+
+### Preact Signals Integration
+
+While Preact Query uses hooks, you can integrate with Preact Signals:
+
+```tsx
+import { signal } from '@preact/signals'
+import { useQuery } from '@tanstack/preact-query'
+
+const todoId = signal(1)
+
+function TodoDetail() {
+  const { data } = useQuery({
+    queryKey: ['todo', todoId.value],
+    queryFn: () => fetchTodo(todoId.value),
+  })
+
+  return (
+    <div>
+      <button onClick={() => todoId.value++}>Next Todo</button>
+      {data && <h1>{data.title}</h1>}
+    </div>
+  )
+}
+```
+
+<Tip>
+Access signal values with `.value` when using them in query keys or functions.
+</Tip>
+
+## Hydration
+
+For SSR with Preact:
+
+```tsx
+import { HydrationBoundary, dehydrate } from '@tanstack/preact-query'
+
+// Server-side
+export async function getServerData() {
+  const queryClient = new QueryClient()
+  
+  await queryClient.prefetchQuery({
+    queryKey: ['todos'],
+    queryFn: fetchTodos,
+  })
+
+  return {
+    dehydratedState: dehydrate(queryClient),
+  }
+}
+
+// Client-side
+function MyApp({ dehydratedState }) {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <HydrationBoundary state={dehydratedState}>
+        <YourApp />
+      </HydrationBoundary>
+    </QueryClientProvider>
+  )
+}
+```
+
+## TypeScript
+
+Full TypeScript support:
+
+```tsx
+import { useQuery } from '@tanstack/preact-query'
+
+interface Todo {
+  id: number
+  title: string
+  completed: boolean
+}
+
+function Todos() {
+  const { data } = useQuery({
+    queryKey: ['todos'],
+    queryFn: async (): Promise<Todo[]> => {
+      const res = await fetch('/api/todos')
+      return res.json()
+    },
+  })
+  
+  // data is typed as Todo[] | undefined
+  return <div>{data?.length} todos</div>
+}
+```
+
+## React vs Preact Differences
+
+### API Compatibility
+
+The API is virtually identical to React Query:
+
+<Tabs>
+  <Tab title="Preact">
+```tsx
+import { useQuery } from '@tanstack/preact-query'
+
+function Component() {
+  const query = useQuery({ queryKey: ['data'], queryFn: fetchData })
+  return <div>{query.data}</div>
+}
+```
+  </Tab>
+  <Tab title="React">
+```tsx
+import { useQuery } from '@tanstack/react-query'
+
+function Component() {
+  const query = useQuery({ queryKey: ['data'], queryFn: fetchData })
+  return <div>{query.data}</div>
+}
+```
+  </Tab>
+</Tabs>
+
+### Suspense with Compat
+
+```tsx
+// Import from preact/compat for Suspense features
+import { Suspense } from 'preact/compat'
+import { useSuspenseQuery } from '@tanstack/preact-query'
+
+function App() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <DataComponent />
+    </Suspense>
+  )
+}
+```
+
+## Performance
+
+### Automatic Request Cancellation
+
+```tsx
+function SearchResults({ query }) {
+  const { data } = useQuery({
+    queryKey: ['search', query],
+    queryFn: async ({ signal }) => {
+      const res = await fetch(`/api/search?q=${query}`, { signal })
+      return res.json()
+    },
+  })
+  
+  return <div>{/* results */}</div>
+}
+```
+
+### useMutationState
+
+```tsx
+import { useMutationState } from '@tanstack/preact-query'
+
+function GlobalLoadingIndicator() {
+  const pendingMutations = useMutationState({
+    filters: { status: 'pending' },
+  })
+
+  if (pendingMutations.length === 0) return null
+  
+  return <div>Saving {pendingMutations.length} changes...</div>
+}
+```
+
+### useIsFetching
+
+```tsx
+import { useIsFetching } from '@tanstack/preact-query'
+
+function LoadingBar() {
+  const isFetching = useIsFetching()
+  
+  if (!isFetching) return null
+  
+  return <div class="loading-bar" />
+}
+```
+
+## Migration from React Query
+
+Migrating from React Query is straightforward:
+
+1. Change package imports:
+```tsx
+// Before (React)
+import { useQuery } from '@tanstack/react-query'
+
+// After (Preact)
+import { useQuery } from '@tanstack/preact-query'
+```
+
+2. Use `preact/compat` for Suspense:
+```tsx
+import { Suspense } from 'preact/compat'
+```
+
+3. Everything else remains the same.
+
+<Note>
+Preact Query maintains API parity with React Query, making migration seamless.
+</Note>
+
+## DevTools
+
+Use Preact Query DevTools for debugging:
+
+```bash
+npm install @tanstack/preact-query-devtools
+```
+
+Setup:
+```tsx
+import { PrefactQueryDevtools } from '@tanstack/preact-query-devtools'
+
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <YourApp />
+      <PrefactQueryDevtools initialIsOpen={false} />
+    </QueryClientProvider>
+  )
+}
+```
+
+## Best Practices
+
+### Bundle Size
+
+Preact is known for small bundles. Optimize further:
+
+```tsx
+// Import only what you need
+import { useQuery } from '@tanstack/preact-query'
+
+// Avoid importing everything
+// import * as PreactQuery from '@tanstack/preact-query' ❌
+```
+
+### Preact Compat
+
+Use compat mode for maximum React compatibility:
+
+```json
+{
+  "alias": {
+    "react": "preact/compat",
+    "react-dom": "preact/compat"
+  }
+}
+```
+
+## Related Resources
+
+- [Preact Query DevTools](/guides/devtools)
+- [Preact Documentation](https://preactjs.com/)
+- [Migrating from React](https://preactjs.com/guide/v10/switching-to-preact)

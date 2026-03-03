@@ -1,0 +1,367 @@
+---
+title: useInfiniteQuery
+description: React hook for fetching paginated or infinite scroll data
+---
+
+# useInfiniteQuery
+
+The `useInfiniteQuery` hook is used for fetching data that is paginated or loaded incrementally (infinite scroll). It extends `useQuery` with additional functionality for managing multiple pages of data.
+
+## Import
+
+```tsx
+import { useInfiniteQuery } from '@tanstack/react-query'
+```
+
+## Signature
+
+```tsx
+function useInfiniteQuery<
+  TQueryFnData,
+  TError = DefaultError,
+  TData = InfiniteData<TQueryFnData>,
+  TQueryKey extends QueryKey = QueryKey,
+  TPageParam = unknown,
+>(
+  options: UseInfiniteQueryOptions<TQueryFnData, TError, TData, TQueryKey, TPageParam>,
+  queryClient?: QueryClient,
+): UseInfiniteQueryResult<TData, TError>
+```
+
+## Type Parameters
+
+<ParamField path="TQueryFnData" type="type">
+  The type of data returned by the query function for a single page
+</ParamField>
+
+<ParamField path="TError" type="type" default="DefaultError">
+  The type of error that can be thrown by the query function
+</ParamField>
+
+<ParamField path="TData" type="type" default="InfiniteData<TQueryFnData>">
+  The type of data returned by the select function (if provided)
+</ParamField>
+
+<ParamField path="TQueryKey" type="type" default="QueryKey">
+  The type of the query key
+</ParamField>
+
+<ParamField path="TPageParam" type="type" default="unknown">
+  The type of the page parameter used for pagination
+</ParamField>
+
+## Parameters
+
+<ParamField path="options" type="UseInfiniteQueryOptions" required>
+  Configuration options for the infinite query. Extends `UseQueryOptions` with additional infinite-specific options.
+
+  <ParamField path="queryKey" type="TQueryKey" required>
+    A unique key for the query. Must be an array.
+  </ParamField>
+
+  <ParamField path="queryFn" type="(context: QueryFunctionContext<TQueryKey, TPageParam>) => Promise<TQueryFnData>" required>
+    The function that fetches a single page of data. Receives `pageParam` in the context.
+  </ParamField>
+
+  <ParamField path="initialPageParam" type="TPageParam" required>
+    The default page parameter to use for the initial page
+  </ParamField>
+
+  <ParamField path="getNextPageParam" type="(lastPage: TQueryFnData, allPages: TQueryFnData[], lastPageParam: TPageParam, allPageParams: TPageParam[]) => TPageParam | undefined | null" required>
+    Function that returns the next page parameter. Return `undefined` or `null` to indicate there are no more pages.
+  </ParamField>
+
+  <ParamField path="getPreviousPageParam" type="(firstPage: TQueryFnData, allPages: TQueryFnData[], firstPageParam: TPageParam, allPageParams: TPageParam[]) => TPageParam | undefined | null">
+    Function that returns the previous page parameter for bi-directional infinite queries
+  </ParamField>
+
+  <ParamField path="maxPages" type="number">
+    Maximum number of pages to store in the query data at once. When the maximum is reached, fetching a new page will remove either the first or last page from the data, depending on the direction of the fetch.
+  </ParamField>
+
+  <ParamField path="enabled" type="boolean" default="true">
+    Set to `false` to disable automatic query execution
+  </ParamField>
+
+  <ParamField path="staleTime" type="number | ((query: Query) => number)" default="0">
+    Time in milliseconds after data is considered stale
+  </ParamField>
+
+  <ParamField path="gcTime" type="number" default="300000">
+    Time in milliseconds that unused/inactive cache data remains in memory
+  </ParamField>
+
+  <ParamField path="refetchOnWindowFocus" type="boolean | 'always'" default="true">
+    If set to `true`, the query will refetch on window focus if the data is stale
+  </ParamField>
+
+  <ParamField path="refetchOnMount" type="boolean | 'always'" default="true">
+    If set to `true`, the query will refetch on mount if the data is stale
+  </ParamField>
+
+  <ParamField path="refetchOnReconnect" type="boolean | 'always'" default="true">
+    If set to `true`, the query will refetch on reconnect if the data is stale
+  </ParamField>
+
+  <ParamField path="retry" type="boolean | number | (failureCount: number, error: TError) => boolean" default="3">
+    Number of retry attempts or function to determine if a request should be retried
+  </ParamField>
+
+  <ParamField path="select" type="(data: InfiniteData<TQueryFnData>) => TData">
+    Function to transform or select a part of the data returned by the query function
+  </ParamField>
+
+  <ParamField path="subscribed" type="boolean" default="true">
+    Set this to `false` to unsubscribe this observer from updates to the query cache
+  </ParamField>
+</ParamField>
+
+<ParamField path="queryClient" type="QueryClient">
+  Optional QueryClient instance to use. If not provided, the client from the nearest `QueryClientProvider` will be used.
+</ParamField>
+
+## Returns
+
+Returns all properties from `useQuery` plus the following:
+
+<ResponseField name="data" type="InfiniteData<TQueryFnData>">
+  The aggregated data from all pages:
+  ```tsx
+  {
+    pages: TQueryFnData[],
+    pageParams: TPageParam[]
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="fetchNextPage" type="(options?: FetchNextPageOptions) => Promise<UseInfiniteQueryResult>">
+  Function to fetch the next page of data. Options:
+  - `cancelRefetch?: boolean` - Cancel any ongoing refetch
+</ResponseField>
+
+<ResponseField name="fetchPreviousPage" type="(options?: FetchPreviousPageOptions) => Promise<UseInfiniteQueryResult>">
+  Function to fetch the previous page of data
+</ResponseField>
+
+<ResponseField name="hasNextPage" type="boolean">
+  Will be `true` if there is a next page to fetch (i.e., `getNextPageParam` returned a value other than `undefined` or `null`)
+</ResponseField>
+
+<ResponseField name="hasPreviousPage" type="boolean">
+  Will be `true` if there is a previous page to fetch
+</ResponseField>
+
+<ResponseField name="isFetchingNextPage" type="boolean">
+  Will be `true` while fetching the next page
+</ResponseField>
+
+<ResponseField name="isFetchingPreviousPage" type="boolean">
+  Will be `true` while fetching the previous page
+</ResponseField>
+
+<ResponseField name="isFetching" type="boolean">
+  Will be `true` whenever a fetch is in progress (including background refetches and next/previous page fetches)
+</ResponseField>
+
+## Examples
+
+### Basic Usage
+
+```tsx
+import { useInfiniteQuery } from '@tanstack/react-query'
+
+interface TodosResponse {
+  data: Todo[]
+  nextCursor: number | null
+}
+
+function TodoList() {
+  const {
+    data,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
+    queryKey: ['todos'],
+    queryFn: async ({ pageParam }) => {
+      const response = await fetch(`/api/todos?cursor=${pageParam}`)
+      return response.json()
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+  })
+
+  return (
+    <>
+      {data?.pages.map((page, i) => (
+        <div key={i}>
+          {page.data.map((todo) => (
+            <div key={todo.id}>{todo.title}</div>
+          ))}
+        </div>
+      ))}
+      <button
+        onClick={() => fetchNextPage()}
+        disabled={!hasNextPage || isFetchingNextPage}
+      >
+        {isFetchingNextPage
+          ? 'Loading more...'
+          : hasNextPage
+          ? 'Load More'
+          : 'Nothing more to load'}
+      </button>
+    </>
+  )
+}
+```
+
+### With Type Safety
+
+```tsx
+interface Todo {
+  id: number
+  title: string
+}
+
+interface TodosResponse {
+  items: Todo[]
+  nextPage: number | undefined
+}
+
+function TodoList() {
+  const query = useInfiniteQuery<
+    TodosResponse,  // TQueryFnData
+    Error,          // TError
+    InfiniteData<TodosResponse>, // TData
+    string[],       // TQueryKey
+    number          // TPageParam
+  >({
+    queryKey: ['todos'],
+    queryFn: async ({ pageParam }) => {
+      const response = await fetch(`/api/todos?page=${pageParam}`)
+      return response.json()
+    },
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => lastPage.nextPage,
+  })
+}
+```
+
+### Bi-directional Infinite Query
+
+```tsx
+function Feed() {
+  const {
+    data,
+    fetchNextPage,
+    fetchPreviousPage,
+    hasNextPage,
+    hasPreviousPage,
+  } = useInfiniteQuery({
+    queryKey: ['feed'],
+    queryFn: async ({ pageParam }) => {
+      const response = await fetch(`/api/feed?cursor=${pageParam}`)
+      return response.json()
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+    getPreviousPageParam: (firstPage) => firstPage.prevCursor,
+  })
+
+  return (
+    <>
+      <button
+        onClick={() => fetchPreviousPage()}
+        disabled={!hasPreviousPage}
+      >
+        Load Newer
+      </button>
+
+      {data?.pages.map((page, i) => (
+        <div key={i}>
+          {page.items.map((item) => (
+            <div key={item.id}>{item.content}</div>
+          ))}
+        </div>
+      ))}
+
+      <button
+        onClick={() => fetchNextPage()}
+        disabled={!hasNextPage}
+      >
+        Load Older
+      </button>
+    </>
+  )
+}
+```
+
+### Infinite Scroll with Intersection Observer
+
+```tsx
+import { useInfiniteQuery } from '@tanstack/react-query'
+import { useInView } from 'react-intersection-observer'
+import { useEffect } from 'react'
+
+function InfiniteScrollList() {
+  const { ref, inView } = useInView()
+
+  const {
+    data,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
+    queryKey: ['items'],
+    queryFn: fetchItems,
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+  })
+
+  useEffect(() => {
+    if (inView && hasNextPage) {
+      fetchNextPage()
+    }
+  }, [inView, hasNextPage, fetchNextPage])
+
+  return (
+    <>
+      {data?.pages.map((page, i) => (
+        <div key={i}>
+          {page.items.map((item) => (
+            <div key={item.id}>{item.title}</div>
+          ))}
+        </div>
+      ))}
+      <div ref={ref}>
+        {isFetchingNextPage && <div>Loading more...</div>}
+      </div>
+    </>
+  )
+}
+```
+
+### With Data Transformation
+
+```tsx
+function TodoList() {
+  const { data } = useInfiniteQuery({
+    queryKey: ['todos'],
+    queryFn: fetchTodos,
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+    select: (data) => ({
+      pages: data.pages.map((page) => 
+        page.items.filter((item) => !item.completed)
+      ),
+      pageParams: data.pageParams,
+    }),
+  })
+
+  // Only incomplete todos are returned
+}
+```
+
+## Source
+
+Implementation: [useInfiniteQuery.ts:72](~/workspace/source/packages/react-query/src/useInfiniteQuery.ts)

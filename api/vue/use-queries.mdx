@@ -1,0 +1,388 @@
+---
+title: useQueries
+description: Vue composable for executing multiple queries in parallel
+---
+
+Execute multiple queries in parallel with the `useQueries` composable. It returns an array of query results that are all reactive and managed independently.
+
+## Signature
+
+```ts
+function useQueries<T extends Array<any>, TCombinedResult>(
+  options: {
+    queries: UseQueriesOptionsArg<T> | (() => UseQueriesOptionsArg<T>)
+    combine?: (results: UseQueriesResults<T>) => TCombinedResult
+  } & ShallowOption,
+  queryClient?: QueryClient,
+): Readonly<Ref<TCombinedResult>>
+```
+
+## Parameters
+
+<ParamField path="options" type="object" required>
+  Configuration object for multiple queries.
+  
+  <Expandable title="properties">
+    <ParamField path="queries" type="UseQueriesOptionsArg<T> | (() => UseQueriesOptionsArg<T>)" required>
+      Array of query options or a function that returns the array. Each element can be reactive.
+    </ParamField>
+    
+    <ParamField path="combine" type="(results: UseQueriesResults<T>) => TCombinedResult">
+      Optional function to combine/transform the results array into a custom structure.
+    </ParamField>
+    
+    <ParamField path="shallow" type="boolean">
+      Return data in a shallow ref (improves performance if data doesn't need deep reactivity).
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="queryClient" type="QueryClient">
+  Custom QueryClient instance. If not provided, uses the client from context.
+</ParamField>
+
+## Returns
+
+<ResponseField name="Readonly<Ref<TCombinedResult>>" type="Ref">
+  Reactive ref containing array of query results (or combined result if `combine` is provided).
+  
+  When not using `combine`, each element contains:
+  
+  <Expandable title="properties">
+    <ResponseField name="data" type="TData | undefined">
+      The query result data.
+    </ResponseField>
+    
+    <ResponseField name="error" type="TError | null">
+      The error object if the query failed.
+    </ResponseField>
+    
+    <ResponseField name="isLoading" type="boolean">
+      `true` when fetching for the first time.
+    </ResponseField>
+    
+    <ResponseField name="isFetching" type="boolean">
+      `true` whenever the query is fetching.
+    </ResponseField>
+    
+    <ResponseField name="isSuccess" type="boolean">
+      `true` when the query has successfully fetched data.
+    </ResponseField>
+    
+    <ResponseField name="isError" type="boolean">
+      `true` when the query encountered an error.
+    </ResponseField>
+    
+    <ResponseField name="status" type="'pending' | 'error' | 'success'">
+      The current status of the query.
+    </ResponseField>
+    
+    <ResponseField name="refetch" type="() => Promise<QueryObserverResult>">
+      Manually trigger a refetch of this specific query.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Type Parameters
+
+- `T` - Tuple type representing the array of query options
+- `TCombinedResult` - Type of combined result (defaults to `UseQueriesResults<T>`)
+
+## Examples
+
+### Basic Usage
+
+```vue
+<script setup>
+import { ref } from 'vue'
+import { useQueries } from '@tanstack/vue-query'
+
+const userIds = ref([1, 2, 3])
+
+const results = useQueries({
+  queries: userIds.value.map((id) => ({
+    queryKey: ['user', id],
+    queryFn: () => fetchUser(id),
+  })),
+})
+
+// results.value is an array of query results
+</script>
+
+<template>
+  <div>
+    <div v-for="(result, index) in results" :key="index">
+      <div v-if="result.isLoading">Loading user {{ index + 1 }}...</div>
+      <div v-else-if="result.error">Error: {{ result.error.message }}</div>
+      <div v-else>{{ result.data?.name }}</div>
+    </div>
+  </div>
+</template>
+```
+
+### With TypeScript
+
+```vue
+<script setup lang="ts">
+import { useQueries } from '@tanstack/vue-query'
+
+interface User {
+  id: number
+  name: string
+  email: string
+}
+
+interface Post {
+  id: number
+  title: string
+  userId: number
+}
+
+const results = useQueries({
+  queries: [
+    {
+      queryKey: ['user', 1],
+      queryFn: async (): Promise<User> => {
+        const res = await fetch('/api/users/1')
+        return res.json()
+      },
+    },
+    {
+      queryKey: ['posts'],
+      queryFn: async (): Promise<Post[]> => {
+        const res = await fetch('/api/posts')
+        return res.json()
+      },
+    },
+  ],
+})
+
+// results.value[0].data is typed as User | undefined
+// results.value[1].data is typed as Post[] | undefined
+</script>
+```
+
+### Dynamic Queries
+
+```vue
+<script setup>
+import { ref, computed } from 'vue'
+import { useQueries } from '@tanstack/vue-query'
+
+const userIds = ref([1, 2, 3])
+
+// Use a function to make queries reactive
+const results = useQueries({
+  queries: () => userIds.value.map((id) => ({
+    queryKey: ['user', id],
+    queryFn: () => fetchUser(id),
+  })),
+})
+
+const addUser = () => {
+  userIds.value.push(userIds.value.length + 1)
+  // Automatically triggers new query for the new user
+}
+</script>
+```
+
+### Combining Results
+
+```vue
+<script setup>
+import { useQueries } from '@tanstack/vue-query'
+
+const combinedData = useQueries({
+  queries: [
+    { queryKey: ['users'], queryFn: fetchUsers },
+    { queryKey: ['posts'], queryFn: fetchPosts },
+    { queryKey: ['comments'], queryFn: fetchComments },
+  ],
+  combine: (results) => {
+    return {
+      users: results[0].data,
+      posts: results[1].data,
+      comments: results[2].data,
+      isLoading: results.some(r => r.isLoading),
+      isError: results.some(r => r.isError),
+    }
+  },
+})
+
+// combinedData.value has the structure defined in combine function
+</script>
+
+<template>
+  <div>
+    <div v-if="combinedData.isLoading">Loading...</div>
+    <div v-else-if="combinedData.isError">Error occurred</div>
+    <div v-else>
+      <p>Users: {{ combinedData.users?.length }}</p>
+      <p>Posts: {{ combinedData.posts?.length }}</p>
+      <p>Comments: {{ combinedData.comments?.length }}</p>
+    </div>
+  </div>
+</template>
+```
+
+### Conditional Queries
+
+```vue
+<script setup>
+import { ref } from 'vue'
+import { useQueries } from '@tanstack/vue-query'
+
+const userIds = ref([1, 2, 3])
+const enabled = ref(true)
+
+const results = useQueries({
+  queries: () => userIds.value.map((id) => ({
+    queryKey: ['user', id],
+    queryFn: () => fetchUser(id),
+    enabled: enabled.value, // All queries controlled by same flag
+  })),
+})
+</script>
+```
+
+### Different Query Options
+
+```vue
+<script setup>
+import { useQueries } from '@tanstack/vue-query'
+
+const results = useQueries({
+  queries: [
+    {
+      queryKey: ['critical-data'],
+      queryFn: fetchCriticalData,
+      staleTime: 0, // Always fresh
+      refetchOnWindowFocus: true,
+    },
+    {
+      queryKey: ['cached-data'],
+      queryFn: fetchCachedData,
+      staleTime: 1000 * 60 * 5, // 5 minutes
+      gcTime: 1000 * 60 * 10, // 10 minutes
+    },
+    {
+      queryKey: ['background-data'],
+      queryFn: fetchBackgroundData,
+      refetchInterval: 30000, // Refetch every 30 seconds
+    },
+  ],
+})
+</script>
+```
+
+### Accessing Individual Results
+
+```vue
+<script setup>
+import { computed } from 'vue'
+import { useQueries } from '@tanstack/vue-query'
+
+const results = useQueries({
+  queries: [
+    { queryKey: ['user'], queryFn: fetchUser },
+    { queryKey: ['posts'], queryFn: fetchPosts },
+  ],
+})
+
+// Extract individual results
+const userQuery = computed(() => results.value[0])
+const postsQuery = computed(() => results.value[1])
+
+// Check if all queries are loaded
+const allLoaded = computed(() => 
+  results.value.every(r => r.isSuccess)
+)
+
+// Check if any query is loading
+const anyLoading = computed(() => 
+  results.value.some(r => r.isLoading)
+)
+</script>
+```
+
+### Refetch Individual Queries
+
+```vue
+<script setup>
+import { useQueries } from '@tanstack/vue-query'
+
+const results = useQueries({
+  queries: [
+    { queryKey: ['user'], queryFn: fetchUser },
+    { queryKey: ['posts'], queryFn: fetchPosts },
+  ],
+})
+
+const refetchUser = () => {
+  results.value[0].refetch()
+}
+
+const refetchAll = () => {
+  results.value.forEach(result => result.refetch())
+}
+</script>
+```
+
+### Type-Safe Queries Array
+
+```vue
+<script setup lang="ts">
+import { useQueries } from '@tanstack/vue-query'
+
+interface User {
+  id: number
+  name: string
+}
+
+interface Post {
+  id: number
+  title: string
+}
+
+// Explicitly type the queries array
+const results = useQueries({
+  queries: [
+    {
+      queryKey: ['user'] as const,
+      queryFn: async (): Promise<User> => {
+        const res = await fetch('/api/user')
+        return res.json()
+      },
+    },
+    {
+      queryKey: ['posts'] as const,
+      queryFn: async (): Promise<Post[]> => {
+        const res = await fetch('/api/posts')
+        return res.json()
+      },
+    },
+  ] as const,
+})
+
+// Full type inference for each result
+</script>
+```
+
+## Notes
+
+<Note>
+Each query in the array is tracked independently. Changing one query's parameters will only refetch that specific query.
+</Note>
+
+<Tip>
+Use the `combine` option to derive custom data structures from the results array, such as aggregating loading states or merging data.
+</Tip>
+
+<Warning>
+When using a function for the `queries` option, make sure it's reactive (uses Vue refs/computed). Static arrays won't react to changes.
+</Warning>
+
+## Related
+
+- [useQuery](/api/vue/use-query) - For single queries
+- [Query Keys Guide](/concepts/query-keys) - Best practices for query keys

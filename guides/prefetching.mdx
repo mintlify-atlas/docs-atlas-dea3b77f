@@ -1,0 +1,479 @@
+---
+title: Prefetching
+description: Prefetch data before it's needed for instant loading experiences
+---
+
+Prefetching allows you to fetch data before it's actually needed, creating instant loading experiences for your users.
+
+## Basic Prefetching
+
+Use `queryClient.prefetchQuery()` to prefetch data:
+
+```tsx
+import { useQueryClient } from '@tanstack/react-query'
+
+function Component() {
+  const queryClient = useQueryClient()
+
+  const prefetchPost = (id: number) => {
+    queryClient.prefetchQuery({
+      queryKey: ['post', id],
+      queryFn: () => fetchPost(id),
+      staleTime: 10 * 1000, // Only prefetch if data is older than 10 seconds
+    })
+  }
+
+  return (
+    <ul>
+      {posts.map((post) => (
+        <li key={post.id} onMouseEnter={() => prefetchPost(post.id)}>
+          <Link to={`/posts/${post.id}`}>{post.title}</Link>
+        </li>
+      ))}
+    </ul>
+  )
+}
+```
+
+## When to Prefetch
+
+### On Hover
+
+Prefetch when user hovers over a link:
+
+```tsx
+function PostLink({ post }) {
+  const queryClient = useQueryClient()
+
+  return (
+    <a
+      href={`/posts/${post.id}`}
+      onMouseEnter={() => {
+        queryClient.prefetchQuery({
+          queryKey: ['post', post.id],
+          queryFn: () => fetchPost(post.id),
+        })
+      }}
+    >
+      {post.title}
+    </a>
+  )
+}
+```
+
+### On Focus
+
+Prefetch when user focuses on an input:
+
+```tsx
+function SearchInput() {
+  const queryClient = useQueryClient()
+  const [query, setQuery] = useState('')
+
+  return (
+    <input
+      value={query}
+      onChange={(e) => setQuery(e.target.value)}
+      onFocus={() => {
+        // Prefetch popular searches
+        queryClient.prefetchQuery({
+          queryKey: ['popular-searches'],
+          queryFn: fetchPopularSearches,
+        })
+      }}
+    />
+  )
+}
+```
+
+### On Route Change
+
+Prefetch data for the next page in pagination:
+
+```tsx
+function Posts() {
+  const queryClient = useQueryClient()
+  const [page, setPage] = useState(0)
+
+  const { data } = useQuery({
+    queryKey: ['posts', page],
+    queryFn: () => fetchPosts(page),
+  })
+
+  // Prefetch next page
+  useEffect(() => {
+    if (data?.hasMore) {
+      queryClient.prefetchQuery({
+        queryKey: ['posts', page + 1],
+        queryFn: () => fetchPosts(page + 1),
+      })
+    }
+  }, [page, data, queryClient])
+
+  return (
+    <div>
+      {/* Render posts */}
+      <button onClick={() => setPage(page + 1)}>Next</button>
+    </div>
+  )
+}
+```
+
+### On Mount
+
+Prefetch related data when component mounts:
+
+```tsx
+function PostDetail({ postId }) {
+  const queryClient = useQueryClient()
+
+  const { data: post } = useQuery({
+    queryKey: ['post', postId],
+    queryFn: () => fetchPost(postId),
+  })
+
+  // Prefetch related posts on mount
+  useEffect(() => {
+    if (post?.relatedIds) {
+      post.relatedIds.forEach((id) => {
+        queryClient.prefetchQuery({
+          queryKey: ['post', id],
+          queryFn: () => fetchPost(id),
+        })
+      })
+    }
+  }, [post, queryClient])
+
+  return <div>{/* Render post */}</div>
+}
+```
+
+## Prefetch with staleTime
+
+Prevent refetching data that's already fresh:
+
+```tsx
+queryClient.prefetchQuery({
+  queryKey: ['post', id],
+  queryFn: () => fetchPost(id),
+  staleTime: 5 * 60 * 1000, // Only prefetch if cached data is older than 5 minutes
+})
+```
+
+<Tip>
+Setting `staleTime` in prefetch prevents unnecessary network requests if the data is already in cache and fresh.
+</Tip>
+
+## Prefetching Infinite Queries
+
+Prefetch the first page of an infinite query:
+
+```tsx
+queryClient.prefetchInfiniteQuery({
+  queryKey: ['comments', postId],
+  queryFn: ({ pageParam = 0 }) => fetchComments(postId, pageParam),
+  initialPageParam: 0,
+  getNextPageParam: (lastPage) => lastPage.nextCursor,
+  pages: 1, // Number of pages to prefetch
+})
+```
+
+## Router Integration
+
+### React Router
+
+```tsx
+import { useQueryClient } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
+
+function PostsList() {
+  const queryClient = useQueryClient()
+
+  return (
+    <ul>
+      {posts.map((post) => (
+        <li key={post.id}>
+          <Link
+            to={`/posts/${post.id}`}
+            onMouseEnter={() => {
+              queryClient.prefetchQuery({
+                queryKey: ['post', post.id],
+                queryFn: () => fetchPost(post.id),
+              })
+            }}
+          >
+            {post.title}
+          </Link>
+        </li>
+      ))}
+    </ul>
+  )
+}
+```
+
+### TanStack Router
+
+```tsx
+import { createRoute } from '@tanstack/react-router'
+
+const postRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: 'posts/$postId',
+  loader: async ({ params, context }) => {
+    // Prefetch in the loader
+    await context.queryClient.ensureQueryData({
+      queryKey: ['post', params.postId],
+      queryFn: () => fetchPost(params.postId),
+    })
+  },
+})
+```
+
+### Next.js App Router
+
+Prefetch in Server Components:
+
+```tsx
+// app/posts/page.tsx
+import { QueryClient, dehydrate, HydrationBoundary } from '@tanstack/react-query'
+
+export default async function PostsPage() {
+  const queryClient = new QueryClient()
+
+  // Prefetch on the server
+  await queryClient.prefetchQuery({
+    queryKey: ['posts'],
+    queryFn: fetchPosts,
+  })
+
+  return (
+    <HydrationBoundary state={dehydrate(queryClient)}>
+      <PostsList />
+    </HydrationBoundary>
+  )
+}
+```
+
+## Prefetch vs ensureQueryData
+
+### prefetchQuery
+
+Fires and forgets - doesn't return data:
+
+```tsx
+// Returns void, doesn't wait for data
+queryClient.prefetchQuery({
+  queryKey: ['post', id],
+  queryFn: () => fetchPost(id),
+})
+```
+
+### ensureQueryData
+
+Returns the data, waits if needed:
+
+```tsx
+// Returns Promise<Data>, waits for data
+const data = await queryClient.ensureQueryData({
+  queryKey: ['post', id],
+  queryFn: () => fetchPost(id),
+})
+```
+
+Use `ensureQueryData` when you need the data immediately:
+
+```tsx
+// In a router loader
+loader: async ({ params, context }) => {
+  const post = await context.queryClient.ensureQueryData({
+    queryKey: ['post', params.postId],
+    queryFn: () => fetchPost(params.postId),
+  })
+  
+  // Can use post data here
+  return { post }
+}
+```
+
+## Prefetching Multiple Queries
+
+Prefetch several queries in parallel:
+
+```tsx
+useEffect(() => {
+  Promise.all([
+    queryClient.prefetchQuery({
+      queryKey: ['posts'],
+      queryFn: fetchPosts,
+    }),
+    queryClient.prefetchQuery({
+      queryKey: ['categories'],
+      queryFn: fetchCategories,
+    }),
+    queryClient.prefetchQuery({
+      queryKey: ['user'],
+      queryFn: fetchUser,
+    }),
+  ])
+}, [])
+```
+
+## Conditional Prefetching
+
+Only prefetch under certain conditions:
+
+```tsx
+function PostLink({ post, prefetch = true }) {
+  const queryClient = useQueryClient()
+
+  const handleHover = () => {
+    if (!prefetch) return
+    
+    // Only prefetch if not already in cache
+    const cachedData = queryClient.getQueryData(['post', post.id])
+    if (!cachedData) {
+      queryClient.prefetchQuery({
+        queryKey: ['post', post.id],
+        queryFn: () => fetchPost(post.id),
+      })
+    }
+  }
+
+  return <a onMouseEnter={handleHover}>{post.title}</a>
+}
+```
+
+## Prefetching from Query Data
+
+Use existing query data to prefetch related queries:
+
+```tsx
+function usePosts() {
+  const queryClient = useQueryClient()
+
+  return useQuery({
+    queryKey: ['posts'],
+    queryFn: fetchPosts,
+    onSuccess: (posts) => {
+      // Prefetch individual posts
+      posts.forEach((post) => {
+        queryClient.setQueryData(['post', post.id], post)
+      })
+    },
+  })
+}
+```
+
+<Tip>
+Use `setQueryData` instead of `prefetchQuery` when you already have the data. It's instant and doesn't require a network request.
+</Tip>
+
+## Background Prefetching
+
+Prefetch data in the background while user is idle:
+
+```tsx
+function useBackgroundPrefetch() {
+  const queryClient = useQueryClient()
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      // Prefetch after user has been on page for 2 seconds
+      queryClient.prefetchQuery({
+        queryKey: ['suggested-posts'],
+        queryFn: fetchSuggestedPosts,
+      })
+    }, 2000)
+
+    return () => clearTimeout(timeout)
+  }, [queryClient])
+}
+```
+
+## Debounced Prefetching
+
+Debounce prefetch calls to avoid excessive requests:
+
+```tsx
+import { useDebouncedCallback } from 'use-debounce'
+
+function SearchInput() {
+  const queryClient = useQueryClient()
+
+  const prefetchSearch = useDebouncedCallback((query: string) => {
+    queryClient.prefetchQuery({
+      queryKey: ['search', query],
+      queryFn: () => searchPosts(query),
+    })
+  }, 300)
+
+  return (
+    <input
+      onChange={(e) => prefetchSearch(e.target.value)}
+      placeholder="Search..."
+    />
+  )
+}
+```
+
+## Prefetch with Custom Hook
+
+Create a reusable prefetch hook:
+
+```tsx
+function usePrefetch() {
+  const queryClient = useQueryClient()
+
+  return useCallback(
+    (queryKey: QueryKey, queryFn: QueryFunction) => {
+      queryClient.prefetchQuery({
+        queryKey,
+        queryFn,
+        staleTime: 10 * 1000,
+      })
+    },
+    [queryClient]
+  )
+}
+
+// Usage
+function PostsList() {
+  const prefetch = usePrefetch()
+
+  return (
+    <ul>
+      {posts.map((post) => (
+        <li onMouseEnter={() => prefetch(['post', post.id], () => fetchPost(post.id))}>
+          {post.title}
+        </li>
+      ))}
+    </ul>
+  )
+}
+```
+
+## Best Practices
+
+1. **Set appropriate staleTime** - Prevent refetching fresh data
+2. **Prefetch on user intent** - Hover, focus, route changes
+3. **Use ensureQueryData** when you need the data immediately
+4. **Don't over-prefetch** - Balance UX with bandwidth usage
+5. **Prefetch in parallel** when possible
+6. **Consider user's connection** - Maybe skip prefetch on slow connections
+
+```tsx
+// Check connection before prefetching
+const shouldPrefetch = navigator.connection?.effectiveType !== 'slow-2g'
+
+if (shouldPrefetch) {
+  queryClient.prefetchQuery({
+    queryKey: ['post', id],
+    queryFn: () => fetchPost(id),
+  })
+}
+```
+
+## Next Steps
+
+- [SSR](/guides/ssr) - Prefetch data on the server
+- [Paginated Queries](/guides/paginated-queries) - Prefetch next page
