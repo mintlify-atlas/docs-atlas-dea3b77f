@@ -1,0 +1,337 @@
+---
+title: Mutation
+description: Core class representing a single mutation instance
+---
+
+# Mutation
+
+The `Mutation` class represents a single mutation instance. It manages the lifecycle of a mutation execution, including state, retries, and callbacks.
+
+## Import
+
+```tsx
+import { Mutation } from '@tanstack/query-core'
+```
+
+## Constructor
+
+```tsx
+class Mutation<
+  TData = unknown,
+  TError = DefaultError,
+  TVariables = unknown,
+  TContext = unknown,
+> {
+  constructor(config: MutationConfig<TData, TError, TVariables, TContext>)
+}
+```
+
+## Type Parameters
+
+<ParamField path="TData" type="type" default="unknown">
+  The type of data returned by the mutation function
+</ParamField>
+
+<ParamField path="TError" type="type" default="DefaultError">
+  The type of error that can be thrown
+</ParamField>
+
+<ParamField path="TVariables" type="type" default="unknown">
+  The type of variables passed to the mutation function
+</ParamField>
+
+<ParamField path="TContext" type="type" default="unknown">
+  The type of context returned by onMutate
+</ParamField>
+
+## Properties
+
+### state
+
+```tsx
+state: MutationState<TData, TError, TVariables, TContext>
+```
+
+The current state of the mutation.
+
+```tsx
+interface MutationState<TData, TError, TVariables, TContext> {
+  context: TContext | undefined
+  data: TData | undefined
+  error: TError | null
+  failureCount: number
+  failureReason: TError | null
+  isPaused: boolean
+  status: 'idle' | 'pending' | 'error' | 'success'
+  variables: TVariables | undefined
+  submittedAt: number
+}
+```
+
+### options
+
+```tsx
+options: MutationOptions<TData, TError, TVariables, TContext>
+```
+
+The mutation configuration options.
+
+### mutationId
+
+```tsx
+mutationId: number
+```
+
+Unique identifier for this mutation instance.
+
+## Methods
+
+### execute
+
+```tsx
+execute(variables: TVariables): Promise<TData>
+```
+
+Execute the mutation with the given variables.
+
+### pause
+
+```tsx
+pause(): Promise<void>
+```
+
+Pause the mutation execution.
+
+### continue
+
+```tsx
+continue(): Promise<TData>
+```
+
+Continue a paused mutation.
+
+### cancel
+
+```tsx
+cancel(): Promise<void>
+```
+
+Cancel the mutation.
+
+### setState
+
+```tsx
+setState(state: MutationState<TData, TError, TVariables, TContext>): void
+```
+
+Update the mutation state.
+
+## Examples
+
+### Accessing Mutation State
+
+```tsx
+import { Mutation, QueryClient } from '@tanstack/query-core'
+
+const queryClient = new QueryClient()
+const mutationCache = queryClient.getMutationCache()
+
+// Get all mutations
+const mutations = mutationCache.getAll()
+
+mutations.forEach((mutation) => {
+  console.log('Mutation ID:', mutation.mutationId)
+  console.log('Status:', mutation.state.status)
+  console.log('Data:', mutation.state.data)
+  console.log('Error:', mutation.state.error)
+  console.log('Variables:', mutation.state.variables)
+})
+```
+
+### Filtering Mutations
+
+```tsx
+import { QueryClient } from '@tanstack/query-core'
+
+const queryClient = new QueryClient()
+const mutationCache = queryClient.getMutationCache()
+
+// Find pending mutations
+const pendingMutations = mutationCache.findAll({
+  status: 'pending',
+})
+
+console.log(`${pendingMutations.length} mutations in progress`)
+```
+
+### Accessing Mutation Options
+
+```tsx
+const mutation = mutationCache.find({ mutationKey: ['posts', 'create'] })
+
+if (mutation) {
+  console.log('Mutation Key:', mutation.options.mutationKey)
+  console.log('Mutation Fn:', mutation.options.mutationFn)
+  console.log('Retry:', mutation.options.retry)
+}
+```
+
+### Checking Mutation Status
+
+```tsx
+const mutations = mutationCache.getAll()
+
+const stats = mutations.reduce(
+  (acc, mutation) => {
+    acc[mutation.state.status]++
+    return acc
+  },
+  { idle: 0, pending: 0, success: 0, error: 0 }
+)
+
+console.log('Mutation Statistics:', stats)
+```
+
+### Subscribing to Mutations
+
+```tsx
+import { QueryClient } from '@tanstack/query-core'
+
+const queryClient = new QueryClient()
+const mutationCache = queryClient.getMutationCache()
+
+// Subscribe to mutation cache changes
+const unsubscribe = mutationCache.subscribe((event) => {
+  if (event.type === 'added') {
+    console.log('New mutation added:', event.mutation.mutationId)
+  } else if (event.type === 'updated') {
+    console.log('Mutation updated:', event.mutation.state.status)
+  } else if (event.type === 'removed') {
+    console.log('Mutation removed:', event.mutation.mutationId)
+  }
+})
+
+// Clean up
+unsubscribe()
+```
+
+### Manually Creating Mutations
+
+```tsx
+import { Mutation, QueryClient } from '@tanstack/query-core'
+
+const queryClient = new QueryClient()
+const mutationCache = queryClient.getMutationCache()
+
+const mutation = new Mutation({
+  client: queryClient,
+  mutationId: Date.now(),
+  mutationCache,
+  options: {
+    mutationFn: async (variables) => {
+      const response = await fetch('/api/posts', {
+        method: 'POST',
+        body: JSON.stringify(variables),
+      })
+      return response.json()
+    },
+  },
+})
+
+// Execute the mutation
+mutation.execute({ title: 'Hello', body: 'World' })
+```
+
+### Pausing and Resuming
+
+```tsx
+import { Mutation } from '@tanstack/query-core'
+
+// Create mutation
+const mutation = new Mutation(config)
+
+// Start execution
+const promise = mutation.execute(variables)
+
+// Pause if needed
+if (shouldPause) {
+  await mutation.pause()
+  
+  // Resume later
+  await mutation.continue()
+}
+
+const result = await promise
+```
+
+### Canceling Mutations
+
+```tsx
+import { Mutation } from '@tanstack/query-core'
+
+const mutation = new Mutation(config)
+
+try {
+  const promise = mutation.execute(variables)
+  
+  // Cancel after 5 seconds
+  setTimeout(() => mutation.cancel(), 5000)
+  
+  const result = await promise
+} catch (error) {
+  if (error.name === 'CancelledError') {
+    console.log('Mutation was cancelled')
+  }
+}
+```
+
+## Mutation State
+
+The mutation state object contains:
+
+<ResponseField name="status" type="'idle' | 'pending' | 'success' | 'error'">
+  The current status of the mutation
+</ResponseField>
+
+<ResponseField name="data" type="TData | undefined">
+  The data returned by the mutation function (only set on success)
+</ResponseField>
+
+<ResponseField name="error" type="TError | null">
+  The error thrown by the mutation function (only set on error)
+</ResponseField>
+
+<ResponseField name="variables" type="TVariables | undefined">
+  The variables passed to the mutation function
+</ResponseField>
+
+<ResponseField name="context" type="TContext | undefined">
+  The context returned by the onMutate callback
+</ResponseField>
+
+<ResponseField name="failureCount" type="number">
+  The number of times the mutation has failed
+</ResponseField>
+
+<ResponseField name="failureReason" type="TError | null">
+  The reason for the last failure
+</ResponseField>
+
+<ResponseField name="isPaused" type="boolean">
+  Whether the mutation is currently paused
+</ResponseField>
+
+<ResponseField name="submittedAt" type="number">
+  Timestamp when the mutation was submitted
+</ResponseField>
+
+## Notes
+
+- `Mutation` is a low-level class typically created and managed by `MutationCache`
+- Each call to `mutate()` creates a new `Mutation` instance
+- Mutations are kept in the cache even after completion for state tracking
+- The `mutationId` is unique and auto-incremented
+- Mutations support pause/resume for handling network state changes
+- Failed mutations can be retried based on the retry configuration
+- State changes trigger notifications to observers and cache subscribers
+- Mutations are automatically removed from cache based on `gcTime` setting

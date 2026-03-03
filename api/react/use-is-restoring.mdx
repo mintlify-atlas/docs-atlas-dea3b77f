@@ -1,0 +1,344 @@
+---
+title: useIsRestoring / IsRestoringProvider
+description: Hook and provider for tracking restoration state during hydration
+---
+
+# useIsRestoring / IsRestoringProvider
+
+The `useIsRestoring` hook and `IsRestoringProvider` component are used to track whether queries are currently being restored from persisted state. This is useful for showing different UI during the restoration phase.
+
+## Import
+
+```tsx
+import { useIsRestoring, IsRestoringProvider } from '@tanstack/react-query'
+```
+
+## IsRestoringProvider
+
+A context provider component that tracks restoration state.
+
+### Props
+
+<ParamField path="value" type="boolean" required>
+  Whether queries are currently being restored
+</ParamField>
+
+<ParamField path="children" type="React.ReactNode">
+  Child components that will have access to the restoration state
+</ParamField>
+
+## useIsRestoring
+
+A hook that returns the current restoration state.
+
+### Signature
+
+```tsx
+function useIsRestoring(): boolean
+```
+
+### Returns
+
+<ResponseField name="isRestoring" type="boolean">
+  `true` if queries are currently being restored, `false` otherwise
+</ResponseField>
+
+## Examples
+
+### Basic Usage with Persistor
+
+```tsx
+import { useIsRestoring, IsRestoringProvider } from '@tanstack/react-query'
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
+import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persister'
+
+const queryClient = new QueryClient()
+const persister = createSyncStoragePersister({
+  storage: window.localStorage,
+})
+
+function App() {
+  return (
+    <PersistQueryClientProvider
+      client={queryClient}
+      persistOptions={{ persister }}
+    >
+      <IsRestoringProvider value={true}>
+        <Content />
+      </IsRestoringProvider>
+    </PersistQueryClientProvider>
+  )
+}
+
+function Content() {
+  const isRestoring = useIsRestoring()
+
+  if (isRestoring) {
+    return <div>Restoring cached data...</div>
+  }
+
+  return <MainApp />
+}
+```
+
+### Conditional Loading States
+
+```tsx
+import { useIsRestoring, useQuery } from '@tanstack/react-query'
+
+function Posts() {
+  const isRestoring = useIsRestoring()
+  const { data, isLoading } = useQuery({
+    queryKey: ['posts'],
+    queryFn: fetchPosts,
+  })
+
+  if (isRestoring) {
+    return <div>Restoring from cache...</div>
+  }
+
+  if (isLoading) {
+    return <div>Loading posts...</div>
+  }
+
+  return (
+    <div>
+      {data?.map((post) => (
+        <div key={post.id}>{post.title}</div>
+      ))}
+    </div>
+  )
+}
+```
+
+### Different UI During Restoration
+
+```tsx
+import { useIsRestoring } from '@tanstack/react-query'
+
+function App() {
+  const isRestoring = useIsRestoring()
+
+  return (
+    <div>
+      <header>
+        <h1>My App</h1>
+        {isRestoring && <div className="restoration-badge">Restoring...</div>}
+      </header>
+      <main>
+        <Content />
+      </main>
+    </div>
+  )
+}
+```
+
+### Skeleton During Restoration
+
+```tsx
+import { useIsRestoring, useQuery } from '@tanstack/react-query'
+
+function UserProfile() {
+  const isRestoring = useIsRestoring()
+  const { data } = useQuery({
+    queryKey: ['user'],
+    queryFn: fetchUser,
+  })
+
+  if (isRestoring) {
+    return <ProfileSkeleton />
+  }
+
+  return <Profile user={data} />
+}
+
+function ProfileSkeleton() {
+  return (
+    <div className="skeleton">
+      <div className="skeleton-avatar" />
+      <div className="skeleton-text" />
+      <div className="skeleton-text" />
+    </div>
+  )
+}
+```
+
+### Combining with Query States
+
+```tsx
+import { useIsRestoring, useQuery } from '@tanstack/react-query'
+
+function Posts() {
+  const isRestoring = useIsRestoring()
+  const { data, isLoading, isFetching } = useQuery({
+    queryKey: ['posts'],
+    queryFn: fetchPosts,
+  })
+
+  return (
+    <div>
+      <h2>Posts</h2>
+      
+      {isRestoring && <p>Restoring from cache...</p>}
+      {!isRestoring && isLoading && <p>Loading...</p>}
+      {!isRestoring && !isLoading && isFetching && <p>Updating...</p>}
+      
+      <div>
+        {data?.map((post) => (
+          <div key={post.id}>{post.title}</div>
+        ))}
+      </div>
+    </div>
+  )
+}
+```
+
+### Restoration Progress
+
+```tsx
+import { useState, useEffect } from 'react'
+import { useIsRestoring } from '@tanstack/react-query'
+
+function RestorationProgress() {
+  const isRestoring = useIsRestoring()
+  const [progress, setProgress] = useState(0)
+
+  useEffect(() => {
+    if (!isRestoring) {
+      setProgress(100)
+      return
+    }
+
+    // Simulate progress
+    const interval = setInterval(() => {
+      setProgress((prev) => Math.min(prev + 10, 90))
+    }, 100)
+
+    return () => clearInterval(interval)
+  }, [isRestoring])
+
+  if (!isRestoring && progress === 100) {
+    return null
+  }
+
+  return (
+    <div className="progress-bar">
+      <div style={{ width: `${progress}%` }} />
+    </div>
+  )
+}
+```
+
+### Manual Provider Control
+
+```tsx
+import { useState, useEffect } from 'react'
+import { IsRestoringProvider } from '@tanstack/react-query'
+import { persistQueryClient } from '@tanstack/react-query-persist-client'
+
+function App() {
+  const [isRestoring, setIsRestoring] = useState(true)
+  const queryClient = new QueryClient()
+
+  useEffect(() => {
+    persistQueryClient({
+      queryClient,
+      persister,
+      maxAge: Infinity,
+    }).then(() => {
+      setIsRestoring(false)
+    })
+  }, [])
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <IsRestoringProvider value={isRestoring}>
+        <Content />
+      </IsRestoringProvider>
+    </QueryClientProvider>
+  )
+}
+```
+
+### Nested Providers
+
+```tsx
+import { IsRestoringProvider } from '@tanstack/react-query'
+
+function App() {
+  return (
+    <IsRestoringProvider value={false}>
+      <Layout>
+        <Routes>
+          <Route
+            path="/special"
+            element={
+              <IsRestoringProvider value={true}>
+                <SpecialPage />
+              </IsRestoringProvider>
+            }
+          />
+        </Routes>
+      </Layout>
+    </IsRestoringProvider>
+  )
+}
+```
+
+### Disable Interactions During Restoration
+
+```tsx
+import { useIsRestoring } from '@tanstack/react-query'
+
+function ActionButtons() {
+  const isRestoring = useIsRestoring()
+
+  return (
+    <div>
+      <button disabled={isRestoring}>Create Post</button>
+      <button disabled={isRestoring}>Delete All</button>
+      <button disabled={isRestoring}>Refresh</button>
+    </div>
+  )
+}
+```
+
+### Analytics Tracking
+
+```tsx
+import { useEffect } from 'react'
+import { useIsRestoring } from '@tanstack/react-query'
+
+function AnalyticsTracker() {
+  const isRestoring = useIsRestoring()
+
+  useEffect(() => {
+    if (!isRestoring) {
+      // Track that app is fully restored and ready
+      analytics.track('app_ready', {
+        timestamp: Date.now(),
+      })
+    }
+  }, [isRestoring])
+
+  return null
+}
+```
+
+## Use Cases
+
+- **Offline Persistence**: Show different UI while restoring cached queries from local storage
+- **Loading States**: Distinguish between initial load, restoration, and data fetching
+- **User Experience**: Provide feedback during the restoration phase
+- **Performance**: Defer non-critical operations until restoration is complete
+- **Analytics**: Track how long restoration takes
+
+## Notes
+
+- `IsRestoringProvider` is a simple React context provider
+- `useIsRestoring` reads from this context
+- Defaults to `false` if no provider is found
+- Commonly used with persistence plugins like `@tanstack/react-query-persist-client`
+- The restoration flag should be set to `false` once persistence restoration completes
+- Multiple providers can be nested with inner providers overriding outer ones
+- This is a simple boolean flag - you control when it's `true` or `false`

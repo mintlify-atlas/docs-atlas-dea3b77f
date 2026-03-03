@@ -1,0 +1,268 @@
+---
+title: HydrationBoundary
+description: Component for hydrating server-rendered queries on the client
+---
+
+# HydrationBoundary
+
+The `HydrationBoundary` component is used to hydrate queries that were prefetched on the server into the QueryClient cache on the client side. This is essential for Server-Side Rendering (SSR) scenarios.
+
+## Import
+
+```tsx
+import { HydrationBoundary } from '@tanstack/react-query'
+```
+
+## Props
+
+<ParamField path="state" type="DehydratedState | null | undefined" required>
+  The dehydrated state from the server. Typically obtained from `dehydrate(queryClient)` on the server.
+</ParamField>
+
+<ParamField path="options" type="HydrateOptions">
+  Optional hydration options
+  
+  <ParamField path="defaultOptions" type="object">
+    Default options to apply to hydrated queries
+    
+    <ParamField path="queries" type="QueryOptions">
+      Default query options
+    </ParamField>
+  </ParamField>
+</ParamField>
+
+<ParamField path="children" type="React.ReactNode">
+  Child components that will have access to the hydrated queries
+</ParamField>
+
+<ParamField path="queryClient" type="QueryClient">
+  Optional QueryClient instance. If not provided, uses the client from context.
+</ParamField>
+
+## Examples
+
+### Next.js App Router (Server Components)
+
+```tsx
+// app/posts/page.tsx
+import {
+  dehydrate,
+  HydrationBoundary,
+  QueryClient,
+} from '@tanstack/react-query'
+import { Posts } from './posts'
+
+export default async function PostsPage() {
+  const queryClient = new QueryClient()
+
+  // Prefetch on the server
+  await queryClient.prefetchQuery({
+    queryKey: ['posts'],
+    queryFn: fetchPosts,
+  })
+
+  return (
+    <HydrationBoundary state={dehydrate(queryClient)}>
+      <Posts />
+    </HydrationBoundary>
+  )
+}
+
+// app/posts/posts.tsx (Client Component)
+'use client'
+
+import { useQuery } from '@tanstack/react-query'
+
+export function Posts() {
+  // This query will use the prefetched data
+  const { data } = useQuery({
+    queryKey: ['posts'],
+    queryFn: fetchPosts,
+  })
+
+  return (
+    <div>
+      {data?.map((post) => (
+        <div key={post.id}>{post.title}</div>
+      ))}
+    </div>
+  )
+}
+```
+
+### Next.js Pages Router (getServerSideProps)
+
+```tsx
+import {
+  QueryClient,
+  dehydrate,
+  HydrationBoundary,
+} from '@tanstack/react-query'
+import type { GetServerSideProps } from 'next'
+
+export const getServerSideProps: GetServerSideProps = async () => {
+  const queryClient = new QueryClient()
+
+  await queryClient.prefetchQuery({
+    queryKey: ['posts'],
+    queryFn: fetchPosts,
+  })
+
+  return {
+    props: {
+      dehydratedState: dehydrate(queryClient),
+    },
+  }
+}
+
+function PostsPage({ dehydratedState }) {
+  return (
+    <HydrationBoundary state={dehydratedState}>
+      <Posts />
+    </HydrationBoundary>
+  )
+}
+
+function Posts() {
+  const { data } = useQuery({
+    queryKey: ['posts'],
+    queryFn: fetchPosts,
+  })
+
+  return <div>{/* render posts */}</div>
+}
+
+export default PostsPage
+```
+
+### Remix Loader
+
+```tsx
+import { QueryClient, dehydrate } from '@tanstack/react-query'
+import { json, useLoaderData } from '@remix-run/react'
+import { HydrationBoundary } from '@tanstack/react-query'
+
+export async function loader() {
+  const queryClient = new QueryClient()
+
+  await queryClient.prefetchQuery({
+    queryKey: ['posts'],
+    queryFn: fetchPosts,
+  })
+
+  return json({ dehydratedState: dehydrate(queryClient) })
+}
+
+export default function PostsRoute() {
+  const { dehydratedState } = useLoaderData<typeof loader>()
+
+  return (
+    <HydrationBoundary state={dehydratedState}>
+      <Posts />
+    </HydrationBoundary>
+  )
+}
+```
+
+### Multiple Boundaries
+
+```tsx
+import { HydrationBoundary } from '@tanstack/react-query'
+
+function App({ postsState, usersState }) {
+  return (
+    <div>
+      <HydrationBoundary state={postsState}>
+        <Posts />
+      </HydrationBoundary>
+      
+      <HydrationBoundary state={usersState}>
+        <Users />
+      </HydrationBoundary>
+    </div>
+  )
+}
+```
+
+### Nested Boundaries
+
+```tsx
+import { HydrationBoundary } from '@tanstack/react-query'
+
+function Layout({ layoutState, children }) {
+  return (
+    <HydrationBoundary state={layoutState}>
+      <Header />
+      <main>{children}</main>
+      <Footer />
+    </HydrationBoundary>
+  )
+}
+
+function PostsPage({ postsState }) {
+  return (
+    <Layout layoutState={layoutState}>
+      <HydrationBoundary state={postsState}>
+        <Posts />
+      </HydrationBoundary>
+    </Layout>
+  )
+}
+```
+
+### With Custom Options
+
+```tsx
+import { HydrationBoundary } from '@tanstack/react-query'
+
+function App({ dehydratedState }) {
+  return (
+    <HydrationBoundary
+      state={dehydratedState}
+      options={{
+        defaultOptions: {
+          queries: {
+            staleTime: 60 * 1000, // 1 minute
+          },
+        },
+      }}
+    >
+      <Posts />
+    </HydrationBoundary>
+  )
+}
+```
+
+### Handling Null State
+
+```tsx
+import { HydrationBoundary } from '@tanstack/react-query'
+
+function App({ dehydratedState }) {
+  // HydrationBoundary safely handles null/undefined state
+  return (
+    <HydrationBoundary state={dehydratedState}>
+      <Posts />
+    </HydrationBoundary>
+  )
+}
+```
+
+## How It Works
+
+1. **Server Side**: Use `dehydrate(queryClient)` to serialize the cache into a plain object
+2. **Transfer**: Pass this dehydrated state from server to client (via props, loaders, etc.)
+3. **Client Side**: `HydrationBoundary` calls `hydrate()` to restore the cache
+4. **Optimization**: New queries are hydrated immediately during render, while existing queries are hydrated in an effect to avoid updating current page data during transitions
+
+## Notes
+
+- The `state` prop can be `null` or `undefined` - the component handles this gracefully
+- Hydration only occurs if the query doesn't already exist in the cache or if the hydrated data is newer
+- Multiple `HydrationBoundary` components can be used for different parts of your app
+- The component performs intelligent hydration timing:
+  - New queries (not in cache) are hydrated during render
+  - Existing queries are hydrated in an effect to support React transitions
+- If a query already exists with newer data, hydration is skipped for that query
+- The component returns children as-is (it's a transparent wrapper)
+- Must be used within a `QueryClientProvider`

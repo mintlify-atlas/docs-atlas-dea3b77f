@@ -1,0 +1,241 @@
+---
+title: useSuspenseInfiniteQuery
+description: React hook for fetching infinite data with Suspense support
+---
+
+# useSuspenseInfiniteQuery
+
+The `useSuspenseInfiniteQuery` hook is a Suspense-enabled version of `useInfiniteQuery`. It suspends rendering until data is available and always returns data (never undefined).
+
+## Import
+
+```tsx
+import { useSuspenseInfiniteQuery } from '@tanstack/react-query'
+```
+
+## Signature
+
+```tsx
+function useSuspenseInfiniteQuery<
+  TQueryFnData,
+  TError = DefaultError,
+  TData = InfiniteData<TQueryFnData>,
+  TQueryKey extends QueryKey = QueryKey,
+  TPageParam = unknown,
+>(
+  options: UseSuspenseInfiniteQueryOptions<
+    TQueryFnData,
+    TError,
+    TData,
+    TQueryKey,
+    TPageParam
+  >,
+  queryClient?: QueryClient,
+): UseSuspenseInfiniteQueryResult<TData, TError>
+```
+
+## Type Parameters
+
+<ParamField path="TQueryFnData" type="type">
+  The type of data returned by the query function for each page
+</ParamField>
+
+<ParamField path="TError" type="type" default="DefaultError">
+  The type of error that can be thrown by the query function
+</ParamField>
+
+<ParamField path="TData" type="type" default="InfiniteData<TQueryFnData>">
+  The type of data returned by the select function (if provided)
+</ParamField>
+
+<ParamField path="TQueryKey" type="type" default="QueryKey">
+  The type of the query key
+</ParamField>
+
+<ParamField path="TPageParam" type="type" default="unknown">
+  The type of the page parameter
+</ParamField>
+
+## Parameters
+
+<ParamField path="options" type="UseSuspenseInfiniteQueryOptions" required>
+  Configuration options for the infinite query. All options from `useInfiniteQuery` are supported, with the following differences:
+
+  <ParamField path="queryKey" type="TQueryKey" required>
+    A unique key for the query. Must be an array.
+  </ParamField>
+
+  <ParamField path="queryFn" type="QueryFunction<TQueryFnData, TQueryKey>" required>
+    The function that will be called to fetch data. Cannot use `skipToken` with Suspense queries.
+  </ParamField>
+
+  <ParamField path="initialPageParam" type="TPageParam" required>
+    The default page param to use when fetching the first page
+  </ParamField>
+
+  <ParamField path="getNextPageParam" type="(lastPage: TQueryFnData, allPages: TQueryFnData[], lastPageParam: TPageParam, allPageParams: TPageParam[]) => TPageParam | undefined | null" required>
+    Function that returns the next page parameter. Return `undefined` or `null` to indicate there are no more pages.
+  </ParamField>
+
+  <ParamField path="getPreviousPageParam" type="(firstPage: TQueryFnData, allPages: TQueryFnData[], firstPageParam: TPageParam, allPageParams: TPageParam[]) => TPageParam | undefined | null">
+    Function that returns the previous page parameter. Return `undefined` or `null` to indicate there are no previous pages.
+  </ParamField>
+
+  <ParamField path="enabled" type="boolean" default="true">
+    This option is always set to `true` for suspense queries
+  </ParamField>
+
+  <ParamField path="throwOnError" type="boolean | (error: TError) => boolean" default="true">
+    Set to `true` to throw errors to the nearest error boundary
+  </ParamField>
+</ParamField>
+
+<ParamField path="queryClient" type="QueryClient">
+  Optional QueryClient instance to use. If not provided, the context client is used.
+</ParamField>
+
+## Returns
+
+<ResponseField name="data" type="TData" required>
+  The data returned by the query function. Always defined (never undefined) for suspense queries.
+</ResponseField>
+
+<ResponseField name="error" type="null">
+  Always `null` for suspense queries (errors are thrown to error boundaries)
+</ResponseField>
+
+<ResponseField name="status" type="'success'">
+  Always `'success'` for suspense queries
+</ResponseField>
+
+<ResponseField name="fetchStatus" type="FetchStatus">
+  The fetch status of the query: `'fetching'`, `'paused'`, or `'idle'`
+</ResponseField>
+
+<ResponseField name="isSuccess" type="true">
+  Always `true` for suspense queries
+</ResponseField>
+
+<ResponseField name="isPending" type="false">
+  Always `false` for suspense queries
+</ResponseField>
+
+<ResponseField name="isError" type="false">
+  Always `false` for suspense queries
+</ResponseField>
+
+<ResponseField name="isFetching" type="boolean">
+  Whether the query is currently fetching
+</ResponseField>
+
+<ResponseField name="hasNextPage" type="boolean">
+  Whether there is a next page available
+</ResponseField>
+
+<ResponseField name="hasPreviousPage" type="boolean">
+  Whether there is a previous page available
+</ResponseField>
+
+<ResponseField name="fetchNextPage" type="(options?: FetchNextPageOptions) => Promise<InfiniteQueryObserverResult>">
+  Function to fetch the next page
+</ResponseField>
+
+<ResponseField name="fetchPreviousPage" type="(options?: FetchPreviousPageOptions) => Promise<InfiniteQueryObserverResult>">
+  Function to fetch the previous page
+</ResponseField>
+
+<ResponseField name="isFetchingNextPage" type="boolean">
+  Whether the query is currently fetching the next page
+</ResponseField>
+
+<ResponseField name="isFetchingPreviousPage" type="boolean">
+  Whether the query is currently fetching the previous page
+</ResponseField>
+
+<ResponseField name="refetch" type="(options?: RefetchOptions) => Promise<QueryObserverResult>">
+  Function to manually refetch the query
+</ResponseField>
+
+## Examples
+
+### Basic Usage
+
+```tsx
+import { useSuspenseInfiniteQuery } from '@tanstack/react-query'
+
+function Projects() {
+  const {
+    data,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useSuspenseInfiniteQuery({
+    queryKey: ['projects'],
+    queryFn: async ({ pageParam }) => {
+      const res = await fetch(`/api/projects?cursor=${pageParam}`)
+      return res.json()
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+  })
+
+  return (
+    <div>
+      {data.pages.map((page) => (
+        <div key={page.id}>
+          {page.projects.map((project) => (
+            <p key={project.id}>{project.name}</p>
+          ))}
+        </div>
+      ))}
+      <button
+        onClick={() => fetchNextPage()}
+        disabled={!hasNextPage || isFetchingNextPage}
+      >
+        {isFetchingNextPage
+          ? 'Loading more...'
+          : hasNextPage
+            ? 'Load More'
+            : 'Nothing more to load'}
+      </button>
+    </div>
+  )
+}
+```
+
+### With Error Boundary
+
+```tsx
+import { Suspense } from 'react'
+import { ErrorBoundary } from 'react-error-boundary'
+import { useSuspenseInfiniteQuery } from '@tanstack/react-query'
+
+function App() {
+  return (
+    <ErrorBoundary fallback={<div>Something went wrong</div>}>
+      <Suspense fallback={<div>Loading...</div>}>
+        <Projects />
+      </Suspense>
+    </ErrorBoundary>
+  )
+}
+
+function Projects() {
+  const { data } = useSuspenseInfiniteQuery({
+    queryKey: ['projects'],
+    queryFn: fetchProjects,
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+  })
+
+  // data is always defined here
+  return <div>{/* render data */}</div>
+}
+```
+
+## Notes
+
+- `skipToken` cannot be used with `useSuspenseInfiniteQuery`. If you need conditional fetching, use `useInfiniteQuery` instead.
+- The component will suspend until the initial data is loaded.
+- Errors are thrown to the nearest error boundary by default.
+- The `enabled` option is always set to `true` and cannot be disabled.

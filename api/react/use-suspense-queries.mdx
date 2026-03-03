@@ -1,0 +1,217 @@
+---
+title: useSuspenseQueries
+description: React hook for running multiple queries in parallel with Suspense support
+---
+
+# useSuspenseQueries
+
+The `useSuspenseQueries` hook is a Suspense-enabled version of `useQueries`. It suspends rendering until all queries have data and always returns data (never undefined).
+
+## Import
+
+```tsx
+import { useSuspenseQueries } from '@tanstack/react-query'
+```
+
+## Signature
+
+```tsx
+function useSuspenseQueries<
+  T extends Array<any>,
+  TCombinedResult = SuspenseQueriesResults<T>,
+>(
+  options: {
+    queries: readonly [...SuspenseQueriesOptions<T>]
+    combine?: (result: SuspenseQueriesResults<T>) => TCombinedResult
+  },
+  queryClient?: QueryClient,
+): TCombinedResult
+```
+
+## Type Parameters
+
+<ParamField path="T" type="type">
+  Array type representing the queries configuration
+</ParamField>
+
+<ParamField path="TCombinedResult" type="type" default="SuspenseQueriesResults<T>">
+  The type of the combined result when using the `combine` option
+</ParamField>
+
+## Parameters
+
+<ParamField path="options" type="object" required>
+  Configuration object for the queries
+
+  <ParamField path="queries" type="readonly [...SuspenseQueriesOptions<T>]" required>
+    An array of query options. Each query in the array accepts the same options as `useSuspenseQuery`.
+  </ParamField>
+
+  <ParamField path="combine" type="(result: SuspenseQueriesResults<T>) => TCombinedResult">
+    Optional function to combine or select data from all queries. This function is called whenever any query updates.
+  </ParamField>
+</ParamField>
+
+<ParamField path="queryClient" type="QueryClient">
+  Optional QueryClient instance to use. If not provided, the context client is used.
+</ParamField>
+
+## Returns
+
+Returns an array of query results (one for each query), or the result of the `combine` function if provided. Each query result has the same shape as `useSuspenseQuery` results:
+
+<ResponseField name="data" type="TData" required>
+  The data for the query. Always defined (never undefined) for suspense queries.
+</ResponseField>
+
+<ResponseField name="error" type="null">
+  Always `null` for suspense queries (errors are thrown to error boundaries)
+</ResponseField>
+
+<ResponseField name="status" type="'success'">
+  Always `'success'` for suspense queries
+</ResponseField>
+
+<ResponseField name="isSuccess" type="true">
+  Always `true` for suspense queries
+</ResponseField>
+
+<ResponseField name="isPending" type="false">
+  Always `false` for suspense queries
+</ResponseField>
+
+<ResponseField name="isError" type="false">
+  Always `false` for suspense queries
+</ResponseField>
+
+## Examples
+
+### Basic Usage
+
+```tsx
+import { useSuspenseQueries } from '@tanstack/react-query'
+
+function App() {
+  const results = useSuspenseQueries({
+    queries: [
+      {
+        queryKey: ['post', 1],
+        queryFn: () => fetchPost(1),
+      },
+      {
+        queryKey: ['post', 2],
+        queryFn: () => fetchPost(2),
+      },
+    ],
+  })
+
+  // All data is guaranteed to be defined
+  const [post1, post2] = results
+  
+  return (
+    <div>
+      <h1>{post1.data.title}</h1>
+      <h1>{post2.data.title}</h1>
+    </div>
+  )
+}
+```
+
+### With Combine Function
+
+```tsx
+import { useSuspenseQueries } from '@tanstack/react-query'
+
+function App() {
+  const combined = useSuspenseQueries({
+    queries: [
+      {
+        queryKey: ['post', 1],
+        queryFn: () => fetchPost(1),
+      },
+      {
+        queryKey: ['post', 2],
+        queryFn: () => fetchPost(2),
+      },
+    ],
+    combine: (results) => {
+      return {
+        data: results.map((result) => result.data),
+        isPending: results.some((result) => result.isPending),
+      }
+    },
+  })
+
+  return (
+    <div>
+      {combined.data.map((post) => (
+        <h1 key={post.id}>{post.title}</h1>
+      ))}
+    </div>
+  )
+}
+```
+
+### Dynamic Queries
+
+```tsx
+import { useSuspenseQueries } from '@tanstack/react-query'
+
+function Posts({ ids }: { ids: number[] }) {
+  const results = useSuspenseQueries({
+    queries: ids.map((id) => ({
+      queryKey: ['post', id],
+      queryFn: () => fetchPost(id),
+    })),
+  })
+
+  return (
+    <div>
+      {results.map((result) => (
+        <div key={result.data.id}>
+          <h2>{result.data.title}</h2>
+          <p>{result.data.body}</p>
+        </div>
+      ))}
+    </div>
+  )
+}
+```
+
+### With Error Boundary and Suspense
+
+```tsx
+import { Suspense } from 'react'
+import { ErrorBoundary } from 'react-error-boundary'
+import { useSuspenseQueries } from '@tanstack/react-query'
+
+function App() {
+  return (
+    <ErrorBoundary fallback={<div>Something went wrong</div>}>
+      <Suspense fallback={<div>Loading...</div>}>
+        <Posts />
+      </Suspense>
+    </ErrorBoundary>
+  )
+}
+
+function Posts() {
+  const results = useSuspenseQueries({
+    queries: [
+      { queryKey: ['posts'], queryFn: fetchPosts },
+      { queryKey: ['users'], queryFn: fetchUsers },
+    ],
+  })
+
+  // All data is guaranteed to be defined
+  return <div>{/* render data */}</div>
+}
+```
+
+## Notes
+
+- `skipToken` cannot be used with any of the queries in `useSuspenseQueries`. If you need conditional fetching, use `useQueries` instead.
+- The component will suspend until all queries have loaded their initial data.
+- If any query errors, the error is thrown to the nearest error boundary.
+- All queries are run in parallel.
+- The `enabled` option is always set to `true` for all queries and cannot be disabled.

@@ -1,0 +1,277 @@
+---
+title: useIsFetching
+description: React hook for tracking the number of fetching queries
+---
+
+# useIsFetching
+
+The `useIsFetching` hook returns the number of queries that are currently fetching. This is useful for showing a global loading indicator.
+
+## Import
+
+```tsx
+import { useIsFetching } from '@tanstack/react-query'
+```
+
+## Signature
+
+```tsx
+function useIsFetching(
+  filters?: QueryFilters,
+  queryClient?: QueryClient,
+): number
+```
+
+## Parameters
+
+<ParamField path="filters" type="QueryFilters">
+  Optional filters to narrow down which queries to count
+  
+  <ParamField path="queryKey" type="QueryKey">
+    Filter by query key
+  </ParamField>
+  
+  <ParamField path="exact" type="boolean">
+    If true, only match queries with the exact query key
+  </ParamField>
+  
+  <ParamField path="predicate" type="(query: Query) => boolean">
+    Custom predicate function to filter queries
+  </ParamField>
+  
+  <ParamField path="type" type="'active' | 'inactive' | 'all'">
+    Filter by query type
+  </ParamField>
+  
+  <ParamField path="stale" type="boolean">
+    Filter by stale state
+  </ParamField>
+</ParamField>
+
+<ParamField path="queryClient" type="QueryClient">
+  Optional QueryClient instance. If not provided, uses the context client.
+</ParamField>
+
+## Returns
+
+<ResponseField name="count" type="number">
+  The number of queries currently fetching that match the filters
+</ResponseField>
+
+## Examples
+
+### Global Loading Indicator
+
+```tsx
+import { useIsFetching } from '@tanstack/react-query'
+
+function GlobalLoadingIndicator() {
+  const isFetching = useIsFetching()
+
+  return isFetching ? (
+    <div className="loading-spinner">
+      Loading...
+    </div>
+  ) : null
+}
+```
+
+### In App Layout
+
+```tsx
+import { useIsFetching } from '@tanstack/react-query'
+
+function AppLayout({ children }) {
+  const isFetching = useIsFetching()
+
+  return (
+    <div>
+      <header>
+        <h1>My App</h1>
+        {isFetching > 0 && (
+          <div className="progress-bar" />
+        )}
+      </header>
+      <main>{children}</main>
+    </div>
+  )
+}
+```
+
+### With Specific Query Filter
+
+```tsx
+import { useIsFetching } from '@tanstack/react-query'
+
+function PostsSection() {
+  // Only count queries with 'posts' in their key
+  const isFetchingPosts = useIsFetching({ queryKey: ['posts'] })
+
+  return (
+    <div>
+      <h2>Posts {isFetchingPosts > 0 && '(Loading...)'}</h2>
+      <PostsList />
+    </div>
+  )
+}
+```
+
+### Multiple Indicators
+
+```tsx
+import { useIsFetching } from '@tanstack/react-query'
+
+function Dashboard() {
+  const totalFetching = useIsFetching()
+  const fetchingPosts = useIsFetching({ queryKey: ['posts'] })
+  const fetchingUsers = useIsFetching({ queryKey: ['users'] })
+
+  return (
+    <div>
+      <header>
+        {totalFetching > 0 && <GlobalSpinner />}
+      </header>
+      
+      <div>
+        <h2>Posts {fetchingPosts > 0 && <Spinner />}</h2>
+        <Posts />
+      </div>
+      
+      <div>
+        <h2>Users {fetchingUsers > 0 && <Spinner />}</h2>
+        <Users />
+      </div>
+    </div>
+  )
+}
+```
+
+### With Exact Matching
+
+```tsx
+import { useIsFetching } from '@tanstack/react-query'
+
+function Component() {
+  // Only count queries with exact key ['posts', 'list']
+  const isFetching = useIsFetching({
+    queryKey: ['posts', 'list'],
+    exact: true,
+  })
+
+  return <div>{isFetching > 0 ? 'Loading posts...' : 'Idle'}</div>
+}
+```
+
+### With Custom Predicate
+
+```tsx
+import { useIsFetching } from '@tanstack/react-query'
+
+function Component() {
+  // Count only stale queries that are fetching
+  const isFetchingStale = useIsFetching({
+    predicate: (query) => query.state.status === 'pending' && query.isStale(),
+  })
+
+  return (
+    <div>
+      {isFetchingStale > 0 && (
+        <p>Refreshing {isFetchingStale} stale queries...</p>
+      )}
+    </div>
+  )
+}
+```
+
+### Showing Count
+
+```tsx
+import { useIsFetching } from '@tanstack/react-query'
+
+function LoadingBadge() {
+  const count = useIsFetching()
+
+  if (count === 0) return null
+
+  return (
+    <div className="loading-badge">
+      {count} {count === 1 ? 'request' : 'requests'} in progress
+    </div>
+  )
+}
+```
+
+### Combined with State
+
+```tsx
+import { useState, useEffect } from 'react'
+import { useIsFetching } from '@tanstack/react-query'
+
+function Component() {
+  const isFetching = useIsFetching()
+  const [hasShownLoading, setHasShownLoading] = useState(false)
+
+  useEffect(() => {
+    if (isFetching > 0) {
+      setHasShownLoading(true)
+    }
+  }, [isFetching])
+
+  return (
+    <div>
+      {isFetching > 0 && <Spinner />}
+      {!isFetching && hasShownLoading && <SuccessMessage />}
+    </div>
+  )
+}
+```
+
+### Delayed Indicator
+
+```tsx
+import { useState, useEffect } from 'react'
+import { useIsFetching } from '@tanstack/react-query'
+
+function DelayedLoadingIndicator() {
+  const isFetching = useIsFetching()
+  const [showLoading, setShowLoading] = useState(false)
+
+  useEffect(() => {
+    if (isFetching > 0) {
+      // Only show indicator if fetching takes longer than 500ms
+      const timer = setTimeout(() => setShowLoading(true), 500)
+      return () => clearTimeout(timer)
+    } else {
+      setShowLoading(false)
+    }
+  }, [isFetching])
+
+  return showLoading ? <LoadingSpinner /> : null
+}
+```
+
+### Filter by Type
+
+```tsx
+import { useIsFetching } from '@tanstack/react-query'
+
+function Component() {
+  const activeFetching = useIsFetching({ type: 'active' })
+  
+  return (
+    <div>
+      {activeFetching > 0 ? 'Active queries loading...' : 'No active queries'}
+    </div>
+  )
+}
+```
+
+## Notes
+
+- The hook uses `useSyncExternalStore` to efficiently subscribe to query cache changes
+- Returns `0` when no queries are fetching
+- Updates automatically when queries start or stop fetching
+- Can be used multiple times with different filters in the same component
+- Useful for implementing global or section-specific loading indicators
+- The count includes all queries that match the filters, including background refetches
+- Does not cause re-renders unless the count actually changes

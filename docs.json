@@ -78,19 +78,47 @@
               "api/query-cache",
               "api/mutation-cache",
               "api/query-observer",
+              "api/mutation-observer",
               "api/infinite-query-observer",
-              "api/queries-observer"
+              "api/queries-observer",
+              "api/query",
+              "api/mutation"
             ]
           },
           {
-            "group": "React",
+            "group": "React Hooks",
             "pages": [
               "api/react/use-query",
               "api/react/use-mutation",
               "api/react/use-infinite-query",
               "api/react/use-queries",
               "api/react/use-suspense-query",
-              "api/react/query-client-provider"
+              "api/react/use-suspense-infinite-query",
+              "api/react/use-suspense-queries",
+              "api/react/use-prefetch-query",
+              "api/react/use-prefetch-infinite-query",
+              "api/react/use-query-client",
+              "api/react/use-is-fetching",
+              "api/react/use-is-mutating",
+              "api/react/use-mutation-state",
+              "api/react/use-query-error-reset-boundary",
+              "api/react/use-is-restoring"
+            ]
+          },
+          {
+            "group": "React Components",
+            "pages": [
+              "api/react/query-client-provider",
+              "api/react/hydration-boundary",
+              "api/react/query-error-reset-boundary"
+            ]
+          },
+          {
+            "group": "React Utilities",
+            "pages": [
+              "api/react/query-options",
+              "api/react/infinite-query-options",
+              "api/react/mutation-options"
             ]
           },
           {

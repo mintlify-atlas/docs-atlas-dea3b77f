@@ -1,0 +1,313 @@
+---
+title: mutationOptions
+description: Type-safe helper for defining mutation options
+---
+
+# mutationOptions
+
+The `mutationOptions` helper provides type-safe mutation options with proper type inference. It's a lightweight identity function that helps TypeScript infer types correctly and provides better autocomplete for mutations.
+
+## Import
+
+```tsx
+import { mutationOptions } from '@tanstack/react-query'
+```
+
+## Signature
+
+```tsx
+function mutationOptions<
+  TData = unknown,
+  TError = DefaultError,
+  TVariables = void,
+  TOnMutateResult = unknown,
+>(
+  options: UseMutationOptions<TData, TError, TVariables, TOnMutateResult>
+): UseMutationOptions<TData, TError, TVariables, TOnMutateResult>
+```
+
+## Type Parameters
+
+<ParamField path="TData" type="type" default="unknown">
+  The type of data returned by the mutation function
+</ParamField>
+
+<ParamField path="TError" type="type" default="DefaultError">
+  The type of error that can be thrown by the mutation function
+</ParamField>
+
+<ParamField path="TVariables" type="type" default="void">
+  The type of variables passed to the mutation function
+</ParamField>
+
+<ParamField path="TOnMutateResult" type="type" default="unknown">
+  The type of context returned by the onMutate callback
+</ParamField>
+
+## Parameters
+
+<ParamField path="options" type="UseMutationOptions" required>
+  Mutation configuration options. Accepts all options that `useMutation` accepts.
+</ParamField>
+
+## Returns
+
+Returns the same options object that was passed in, with enhanced type information for better TypeScript inference.
+
+## Examples
+
+### Basic Usage
+
+```tsx
+import { mutationOptions, useMutation } from '@tanstack/react-query'
+
+const createPostOptions = mutationOptions({
+  mutationFn: (newPost: { title: string; body: string }) => {
+    return fetch('/api/posts', {
+      method: 'POST',
+      body: JSON.stringify(newPost),
+    }).then(res => res.json())
+  },
+})
+
+function CreatePost() {
+  const mutation = useMutation(createPostOptions)
+  
+  return (
+    <button onClick={() => mutation.mutate({ title: 'Hello', body: 'World' })}>
+      Create Post
+    </button>
+  )
+}
+```
+
+### Reusable Mutation Definitions
+
+```tsx
+import { mutationOptions, useMutation } from '@tanstack/react-query'
+
+interface Post {
+  id: number
+  title: string
+  body: string
+}
+
+const postMutations = {
+  create: mutationOptions({
+    mutationFn: async (newPost: Omit<Post, 'id'>): Promise<Post> => {
+      const res = await fetch('/api/posts', {
+        method: 'POST',
+        body: JSON.stringify(newPost),
+      })
+      return res.json()
+    },
+  }),
+  update: (id: number) => mutationOptions({
+    mutationFn: async (updatedPost: Partial<Post>): Promise<Post> => {
+      const res = await fetch(`/api/posts/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(updatedPost),
+      })
+      return res.json()
+    },
+  }),
+  delete: (id: number) => mutationOptions({
+    mutationFn: async (): Promise<void> => {
+      await fetch(`/api/posts/${id}`, { method: 'DELETE' })
+    },
+  }),
+}
+
+// Use in components
+function CreatePost() {
+  const mutation = useMutation(postMutations.create)
+  return <button onClick={() => mutation.mutate({ title: '', body: '' })}>
+    Create
+  </button>
+}
+
+function EditPost({ id }: { id: number }) {
+  const mutation = useMutation(postMutations.update(id))
+  return <button onClick={() => mutation.mutate({ title: 'Updated' })}>
+    Update
+  </button>
+}
+```
+
+### With Mutation Key
+
+```tsx
+import { mutationOptions, useMutation } from '@tanstack/react-query'
+
+const createPostOptions = mutationOptions({
+  mutationKey: ['posts', 'create'],
+  mutationFn: (newPost: { title: string; body: string }) => {
+    return createPost(newPost)
+  },
+})
+
+function CreatePost() {
+  const mutation = useMutation(createPostOptions)
+  return <div>{/* ... */}</div>
+}
+```
+
+### With Optimistic Updates
+
+```tsx
+import {
+  mutationOptions,
+  useMutation,
+  useQueryClient,
+} from '@tanstack/react-query'
+
+interface Todo {
+  id: number
+  text: string
+  done: boolean
+}
+
+const updateTodoOptions = mutationOptions({
+  mutationFn: async (todo: Todo): Promise<Todo> => {
+    const res = await fetch(`/api/todos/${todo.id}`, {
+      method: 'PUT',
+      body: JSON.stringify(todo),
+    })
+    return res.json()
+  },
+  onMutate: async (newTodo) => {
+    // Cancel outgoing refetches
+    await queryClient.cancelQueries({ queryKey: ['todos'] })
+
+    // Snapshot the previous value
+    const previousTodos = queryClient.getQueryData<Todo[]>(['todos'])
+
+    // Optimistically update to the new value
+    queryClient.setQueryData<Todo[]>(['todos'], (old) => {
+      return old?.map((todo) =>
+        todo.id === newTodo.id ? newTodo : todo
+      )
+    })
+
+    // Return context with the previous value
+    return { previousTodos }
+  },
+  onError: (err, newTodo, context) => {
+    // Rollback on error
+    queryClient.setQueryData(['todos'], context?.previousTodos)
+  },
+  onSettled: () => {
+    // Refetch after error or success
+    queryClient.invalidateQueries({ queryKey: ['todos'] })
+  },
+})
+
+function UpdateTodo({ todo }: { todo: Todo }) {
+  const queryClient = useQueryClient()
+  const mutation = useMutation(updateTodoOptions)
+  
+  return (
+    <button onClick={() => mutation.mutate({ ...todo, done: !todo.done })}>
+      Toggle
+    </button>
+  )
+}
+```
+
+### With Type Inference
+
+```tsx
+import { mutationOptions, useMutation } from '@tanstack/react-query'
+
+interface User {
+  id: number
+  name: string
+  email: string
+}
+
+const registerUserOptions = mutationOptions({
+  mutationFn: async (userData: {
+    name: string
+    email: string
+    password: string
+  }): Promise<User> => {
+    const res = await fetch('/api/register', {
+      method: 'POST',
+      body: JSON.stringify(userData),
+    })
+    return res.json()
+  },
+})
+
+function RegisterForm() {
+  const mutation = useMutation(registerUserOptions)
+  
+  // TypeScript knows:
+  // - mutation.data is User | undefined
+  // - mutation.variables is the userData type
+  // - mutation.error is DefaultError
+  
+  return <div>{mutation.data?.name}</div>
+}
+```
+
+### Factory Pattern
+
+```tsx
+import { mutationOptions } from '@tanstack/react-query'
+
+interface ApiResource<T> {
+  data: T
+  message: string
+}
+
+function createMutationFactory<T>(endpoint: string) {
+  return {
+    create: mutationOptions({
+      mutationFn: async (data: Partial<T>): Promise<ApiResource<T>> => {
+        const res = await fetch(`/api/${endpoint}`, {
+          method: 'POST',
+          body: JSON.stringify(data),
+        })
+        return res.json()
+      },
+    }),
+    update: (id: number) => mutationOptions({
+      mutationFn: async (data: Partial<T>): Promise<ApiResource<T>> => {
+        const res = await fetch(`/api/${endpoint}/${id}`, {
+          method: 'PATCH',
+          body: JSON.stringify(data),
+        })
+        return res.json()
+      },
+    }),
+    delete: (id: number) => mutationOptions({
+      mutationFn: async (): Promise<void> => {
+        await fetch(`/api/${endpoint}/${id}`, { method: 'DELETE' })
+      },
+    }),
+  }
+}
+
+interface Post {
+  id: number
+  title: string
+  body: string
+}
+
+const postMutations = createMutationFactory<Post>('posts')
+
+function CreatePost() {
+  const mutation = useMutation(postMutations.create)
+  return <div>{/* ... */}</div>
+}
+```
+
+## Notes
+
+- `mutationOptions` is an identity function that returns the exact object passed to it.
+- Its primary purpose is to improve TypeScript type inference and provide better autocomplete.
+- It's particularly useful when you want to share mutation configurations across multiple components or files.
+- Unlike `queryOptions`, the `mutationKey` is optional for mutations.
+- This pattern is recommended for organizing and reusing mutation configurations in larger applications.
+- The helper supports all options available in `useMutation`, including callbacks like `onSuccess`, `onError`, and `onMutate`.

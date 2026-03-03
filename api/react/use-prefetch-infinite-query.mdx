@@ -1,0 +1,192 @@
+---
+title: usePrefetchInfiniteQuery
+description: React hook for prefetching infinite queries during render
+---
+
+# usePrefetchInfiniteQuery
+
+The `usePrefetchInfiniteQuery` hook allows you to prefetch an infinite query during component render. This is useful for prefetching paginated data that you know will be needed soon.
+
+## Import
+
+```tsx
+import { usePrefetchInfiniteQuery } from '@tanstack/react-query'
+```
+
+## Signature
+
+```tsx
+function usePrefetchInfiniteQuery<
+  TQueryFnData = unknown,
+  TError = DefaultError,
+  TData = TQueryFnData,
+  TQueryKey extends QueryKey = QueryKey,
+  TPageParam = unknown,
+>(
+  options: FetchInfiniteQueryOptions<
+    TQueryFnData,
+    TError,
+    TData,
+    TQueryKey,
+    TPageParam
+  >,
+  queryClient?: QueryClient,
+): void
+```
+
+## Type Parameters
+
+<ParamField path="TQueryFnData" type="type" default="unknown">
+  The type of data returned by the query function for each page
+</ParamField>
+
+<ParamField path="TError" type="type" default="DefaultError">
+  The type of error that can be thrown by the query function
+</ParamField>
+
+<ParamField path="TData" type="type" default="TQueryFnData">
+  The type of data after transformation
+</ParamField>
+
+<ParamField path="TQueryKey" type="type" default="QueryKey">
+  The type of the query key
+</ParamField>
+
+<ParamField path="TPageParam" type="type" default="unknown">
+  The type of the page parameter
+</ParamField>
+
+## Parameters
+
+<ParamField path="options" type="FetchInfiniteQueryOptions" required>
+  Configuration options for the infinite query to prefetch.
+
+  <ParamField path="queryKey" type="TQueryKey" required>
+    A unique key for the query. Must be an array.
+  </ParamField>
+
+  <ParamField path="queryFn" type="QueryFunction<TQueryFnData, TQueryKey>" required>
+    The function that will be called to fetch data.
+  </ParamField>
+
+  <ParamField path="initialPageParam" type="TPageParam" required>
+    The default page param to use when fetching the first page
+  </ParamField>
+
+  <ParamField path="getNextPageParam" type="(lastPage: TQueryFnData, allPages: TQueryFnData[], lastPageParam: TPageParam, allPageParams: TPageParam[]) => TPageParam | undefined | null" required>
+    Function that returns the next page parameter
+  </ParamField>
+
+  <ParamField path="getPreviousPageParam" type="(firstPage: TQueryFnData, allPages: TQueryFnData[], firstPageParam: TPageParam, allPageParams: TPageParam[]) => TPageParam | undefined | null">
+    Function that returns the previous page parameter
+  </ParamField>
+
+  <ParamField path="pages" type="number">
+    Number of pages to prefetch. Defaults to 1.
+  </ParamField>
+</ParamField>
+
+<ParamField path="queryClient" type="QueryClient">
+  Optional QueryClient instance to use. If not provided, the context client is used.
+</ParamField>
+
+## Returns
+
+This hook does not return anything (`void`). It only triggers a prefetch if the query does not already exist in the cache.
+
+## Examples
+
+### Basic Usage
+
+```tsx
+import { usePrefetchInfiniteQuery } from '@tanstack/react-query'
+
+function ProjectsLink() {
+  // Prefetch the first page of projects
+  usePrefetchInfiniteQuery({
+    queryKey: ['projects'],
+    queryFn: ({ pageParam }) => fetchProjects(pageParam),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+  })
+
+  return <Link to="/projects">View Projects</Link>
+}
+```
+
+### Prefetch Multiple Pages
+
+```tsx
+import { usePrefetchInfiniteQuery } from '@tanstack/react-query'
+
+function ProjectsLink() {
+  // Prefetch the first 3 pages
+  usePrefetchInfiniteQuery({
+    queryKey: ['projects'],
+    queryFn: ({ pageParam }) => fetchProjects(pageParam),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+    pages: 3,
+  })
+
+  return <Link to="/projects">View Projects</Link>
+}
+```
+
+### Conditional Prefetching
+
+```tsx
+import { useState } from 'react'
+import { usePrefetchInfiniteQuery } from '@tanstack/react-query'
+
+function ProjectsLink() {
+  const [shouldPrefetch, setShouldPrefetch] = useState(false)
+
+  // Only prefetch when hovering
+  if (shouldPrefetch) {
+    usePrefetchInfiniteQuery({
+      queryKey: ['projects'],
+      queryFn: ({ pageParam }) => fetchProjects(pageParam),
+      initialPageParam: 0,
+      getNextPageParam: (lastPage) => lastPage.nextCursor,
+    })
+  }
+
+  return (
+    <Link
+      to="/projects"
+      onMouseEnter={() => setShouldPrefetch(true)}
+    >
+      View Projects
+    </Link>
+  )
+}
+```
+
+### With Custom Configuration
+
+```tsx
+import { usePrefetchInfiniteQuery } from '@tanstack/react-query'
+
+function ProjectsLink({ category }: { category: string }) {
+  usePrefetchInfiniteQuery({
+    queryKey: ['projects', category],
+    queryFn: ({ pageParam }) => fetchProjects(category, pageParam),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+    getPreviousPageParam: (firstPage) => firstPage.previousCursor,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  })
+
+  return <Link to={`/projects/${category}`}>View {category} Projects</Link>
+}
+```
+
+## Notes
+
+- The hook only prefetches if the query doesn't already exist in the cache (checked via `queryClient.getQueryState`).
+- This hook is designed to be used during render, making it safe to use in component bodies.
+- By default, only the first page is prefetched. Use the `pages` option to prefetch more pages.
+- For event-based prefetching (like onClick), consider using `queryClient.prefetchInfiniteQuery` directly instead.
+- The prefetch is fire-and-forget; you don't get access to the loading state or data.
+- If you need to access the query state, use `useInfiniteQuery` instead.

@@ -1,0 +1,297 @@
+---
+title: useQueryClient
+description: React hook for accessing the QueryClient instance
+---
+
+# useQueryClient
+
+The `useQueryClient` hook returns the current `QueryClient` instance from the React context. It provides access to all QueryClient methods for manual query and mutation management.
+
+## Import
+
+```tsx
+import { useQueryClient } from '@tanstack/react-query'
+```
+
+## Signature
+
+```tsx
+function useQueryClient(queryClient?: QueryClient): QueryClient
+```
+
+## Parameters
+
+<ParamField path="queryClient" type="QueryClient">
+  Optional QueryClient instance to use. If provided, this client will be returned instead of the context client. Useful for testing or when you want to use a different client instance.
+</ParamField>
+
+## Returns
+
+<ResponseField name="queryClient" type="QueryClient" required>
+  The QueryClient instance from context (or the provided queryClient parameter)
+</ResponseField>
+
+## Examples
+
+### Basic Usage
+
+```tsx
+import { useQueryClient } from '@tanstack/react-query'
+
+function Component() {
+  const queryClient = useQueryClient()
+  
+  const handleInvalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ['posts'] })
+  }
+  
+  return <button onClick={handleInvalidate}>Refresh Posts</button>
+}
+```
+
+### Invalidating Queries
+
+```tsx
+import { useQueryClient, useMutation } from '@tanstack/react-query'
+
+function CreatePost() {
+  const queryClient = useQueryClient()
+  
+  const mutation = useMutation({
+    mutationFn: createPost,
+    onSuccess: () => {
+      // Invalidate and refetch posts after creating a new one
+      queryClient.invalidateQueries({ queryKey: ['posts'] })
+    },
+  })
+  
+  return <button onClick={() => mutation.mutate(newPost)}>Create</button>
+}
+```
+
+### Prefetching Queries
+
+```tsx
+import { useQueryClient } from '@tanstack/react-query'
+
+function PostLink({ id }: { id: number }) {
+  const queryClient = useQueryClient()
+  
+  const handleMouseEnter = () => {
+    // Prefetch the post when hovering
+    queryClient.prefetchQuery({
+      queryKey: ['post', id],
+      queryFn: () => fetchPost(id),
+    })
+  }
+  
+  return (
+    <Link to={`/posts/${id}`} onMouseEnter={handleMouseEnter}>
+      View Post
+    </Link>
+  )
+}
+```
+
+### Setting Query Data Manually
+
+```tsx
+import { useQueryClient, useMutation } from '@tanstack/react-query'
+
+function UpdatePost({ id }: { id: number }) {
+  const queryClient = useQueryClient()
+  
+  const mutation = useMutation({
+    mutationFn: updatePost,
+    onSuccess: (updatedPost) => {
+      // Manually update the cache with the new data
+      queryClient.setQueryData(['post', id], updatedPost)
+      
+      // Update the posts list
+      queryClient.setQueryData<Post[]>(['posts'], (old) => {
+        return old?.map((post) =>
+          post.id === id ? updatedPost : post
+        )
+      })
+    },
+  })
+  
+  return <button onClick={() => mutation.mutate(data)}>Update</button>
+}
+```
+
+### Accessing Query Cache
+
+```tsx
+import { useQueryClient } from '@tanstack/react-query'
+
+function PostStatus({ id }: { id: number }) {
+  const queryClient = useQueryClient()
+  
+  const handleCheck = () => {
+    // Get cached data without triggering a fetch
+    const cachedPost = queryClient.getQueryData(['post', id])
+    
+    // Get query state
+    const queryState = queryClient.getQueryState(['post', id])
+    
+    console.log('Cached:', cachedPost)
+    console.log('State:', queryState)
+  }
+  
+  return <button onClick={handleCheck}>Check Cache</button>
+}
+```
+
+### Canceling Queries
+
+```tsx
+import { useQueryClient } from '@tanstack/react-query'
+
+function Component() {
+  const queryClient = useQueryClient()
+  
+  const handleCancel = () => {
+    // Cancel all outgoing queries
+    queryClient.cancelQueries({ queryKey: ['posts'] })
+  }
+  
+  return <button onClick={handleCancel}>Cancel Requests</button>
+}
+```
+
+### Removing Queries
+
+```tsx
+import { useQueryClient } from '@tanstack/react-query'
+
+function Component() {
+  const queryClient = useQueryClient()
+  
+  const handleLogout = () => {
+    // Remove all queries from cache
+    queryClient.removeQueries()
+    
+    // Or remove specific queries
+    queryClient.removeQueries({ queryKey: ['user'] })
+  }
+  
+  return <button onClick={handleLogout}>Logout</button>
+}
+```
+
+### Resetting Queries
+
+```tsx
+import { useQueryClient } from '@tanstack/react-query'
+
+function Component() {
+  const queryClient = useQueryClient()
+  
+  const handleReset = () => {
+    // Reset queries to their initial state
+    queryClient.resetQueries({ queryKey: ['posts'] })
+  }
+  
+  return <button onClick={handleReset}>Reset</button>
+}
+```
+
+### Accessing Mutation Cache
+
+```tsx
+import { useQueryClient } from '@tanstack/react-query'
+
+function MutationStatus() {
+  const queryClient = useQueryClient()
+  const mutationCache = queryClient.getMutationCache()
+  
+  const handleCheck = () => {
+    // Get all mutations
+    const mutations = mutationCache.getAll()
+    
+    // Get pending mutations
+    const pending = mutationCache.findAll({ status: 'pending' })
+    
+    console.log('All mutations:', mutations)
+    console.log('Pending mutations:', pending)
+  }
+  
+  return <button onClick={handleCheck}>Check Mutations</button>
+}
+```
+
+### Building a Refresh Button
+
+```tsx
+import { useQueryClient } from '@tanstack/react-query'
+
+function RefreshButton() {
+  const queryClient = useQueryClient()
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  
+  const handleRefresh = async () => {
+    setIsRefreshing(true)
+    try {
+      await queryClient.invalidateQueries()
+    } finally {
+      setIsRefreshing(false)
+    }
+  }
+  
+  return (
+    <button onClick={handleRefresh} disabled={isRefreshing}>
+      {isRefreshing ? 'Refreshing...' : 'Refresh All'}
+    </button>
+  )
+}
+```
+
+### With Custom QueryClient
+
+```tsx
+import { useQueryClient, QueryClient } from '@tanstack/react-query'
+
+function Component() {
+  const customClient = new QueryClient()
+  
+  // Use custom client instead of context client
+  const queryClient = useQueryClient(customClient)
+  
+  return <div>{/* ... */}</div>
+}
+```
+
+## Common Methods
+
+The `QueryClient` instance provides many useful methods:
+
+### Query Methods
+- `getQueryData(queryKey)` - Get cached query data
+- `setQueryData(queryKey, updater)` - Set query data manually
+- `getQueryState(queryKey)` - Get query state information
+- `invalidateQueries(filters)` - Mark queries as stale
+- `refetchQueries(filters)` - Refetch queries
+- `cancelQueries(filters)` - Cancel outgoing queries
+- `removeQueries(filters)` - Remove queries from cache
+- `resetQueries(filters)` - Reset queries to initial state
+- `prefetchQuery(options)` - Prefetch a query
+- `fetchQuery(options)` - Fetch and return query data
+
+### Mutation Methods
+- `getMutationCache()` - Get the mutation cache instance
+- `isMutating(filters)` - Check if mutations are running
+
+### Cache Methods
+- `getQueryCache()` - Get the query cache instance
+- `clear()` - Clear all caches
+- `mount()` - Mount the client
+- `unmount()` - Unmount the client
+
+## Notes
+
+- The hook must be used within a `QueryClientProvider`.
+- If no QueryClient is found in context and none is provided, an error is thrown.
+- The optional `queryClient` parameter is primarily useful for testing or special use cases.
+- Most query and mutation hooks accept an optional `queryClient` parameter, making this hook unnecessary in many cases.
+- However, this hook is essential when you need to imperatively interact with the query cache outside of the standard hook lifecycle.

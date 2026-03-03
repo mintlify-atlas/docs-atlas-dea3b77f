@@ -1,0 +1,222 @@
+---
+title: queryOptions
+description: Type-safe helper for defining query options
+---
+
+# queryOptions
+
+The `queryOptions` helper provides type-safe query options with proper type inference. It's a lightweight identity function that helps TypeScript infer types correctly and provides better autocomplete.
+
+## Import
+
+```tsx
+import { queryOptions } from '@tanstack/react-query'
+```
+
+## Signature
+
+```tsx
+function queryOptions<
+  TQueryFnData = unknown,
+  TError = DefaultError,
+  TData = TQueryFnData,
+  TQueryKey extends QueryKey = QueryKey,
+>(
+  options: UseQueryOptions<TQueryFnData, TError, TData, TQueryKey>
+): UseQueryOptions<TQueryFnData, TError, TData, TQueryKey> & {
+  queryKey: DataTag<TQueryKey, TQueryFnData, TError>
+}
+```
+
+## Type Parameters
+
+<ParamField path="TQueryFnData" type="type" default="unknown">
+  The type of data returned by the query function
+</ParamField>
+
+<ParamField path="TError" type="type" default="DefaultError">
+  The type of error that can be thrown by the query function
+</ParamField>
+
+<ParamField path="TData" type="type" default="TQueryFnData">
+  The type of data after transformation by the select function
+</ParamField>
+
+<ParamField path="TQueryKey" type="type" default="QueryKey">
+  The type of the query key
+</ParamField>
+
+## Parameters
+
+<ParamField path="options" type="UseQueryOptions" required>
+  Query configuration options. Accepts all options that `useQuery` accepts.
+</ParamField>
+
+## Returns
+
+Returns the same options object that was passed in, with enhanced type information for better TypeScript inference.
+
+## Examples
+
+### Basic Usage
+
+```tsx
+import { queryOptions, useQuery } from '@tanstack/react-query'
+
+const postQueryOptions = queryOptions({
+  queryKey: ['post', 1],
+  queryFn: () => fetchPost(1),
+})
+
+function Post() {
+  const { data } = useQuery(postQueryOptions)
+  return <div>{data.title}</div>
+}
+```
+
+### Reusable Query Definitions
+
+```tsx
+import { queryOptions, useQuery } from '@tanstack/react-query'
+
+// Define query options once
+const postQueries = {
+  all: () => queryOptions({
+    queryKey: ['posts'],
+    queryFn: fetchPosts,
+  }),
+  detail: (id: number) => queryOptions({
+    queryKey: ['posts', id],
+    queryFn: () => fetchPost(id),
+  }),
+  comments: (id: number) => queryOptions({
+    queryKey: ['posts', id, 'comments'],
+    queryFn: () => fetchPostComments(id),
+  }),
+}
+
+// Use in components
+function Post({ id }: { id: number }) {
+  const { data: post } = useQuery(postQueries.detail(id))
+  const { data: comments } = useQuery(postQueries.comments(id))
+  
+  return <div>{/* render post and comments */}</div>
+}
+```
+
+### With Type Inference
+
+```tsx
+import { queryOptions, useQuery } from '@tanstack/react-query'
+
+interface Post {
+  id: number
+  title: string
+  body: string
+}
+
+const postQueryOptions = queryOptions({
+  queryKey: ['post', 1],
+  queryFn: async (): Promise<Post> => {
+    const res = await fetch('/api/posts/1')
+    return res.json()
+  },
+})
+
+function Post() {
+  // TypeScript knows data is of type Post | undefined
+  const { data } = useQuery(postQueryOptions)
+  return <div>{data?.title}</div>
+}
+```
+
+### With Select
+
+```tsx
+import { queryOptions, useQuery } from '@tanstack/react-query'
+
+const postTitleOptions = queryOptions({
+  queryKey: ['post', 1],
+  queryFn: () => fetchPost(1),
+  select: (data) => data.title,
+})
+
+function PostTitle() {
+  // TypeScript knows data is of type string | undefined
+  const { data } = useQuery(postTitleOptions)
+  return <h1>{data}</h1>
+}
+```
+
+### With QueryClient Methods
+
+```tsx
+import { queryOptions, useQueryClient } from '@tanstack/react-query'
+
+const postQueryOptions = queryOptions({
+  queryKey: ['post', 1],
+  queryFn: () => fetchPost(1),
+})
+
+function Component() {
+  const queryClient = useQueryClient()
+
+  const handleInvalidate = () => {
+    // Type-safe query key
+    queryClient.invalidateQueries(postQueryOptions)
+  }
+
+  const handlePrefetch = () => {
+    // Type-safe prefetching
+    queryClient.prefetchQuery(postQueryOptions)
+  }
+
+  return <div>{/* ... */}</div>
+}
+```
+
+### Factory Pattern
+
+```tsx
+import { queryOptions } from '@tanstack/react-query'
+
+interface User {
+  id: number
+  name: string
+  email: string
+}
+
+const userQueries = {
+  all: () => ['users'] as const,
+  lists: () => [...userQueries.all(), 'list'] as const,
+  list: (filters: string) =>
+    queryOptions({
+      queryKey: [...userQueries.lists(), filters],
+      queryFn: () => fetchUsers(filters),
+    }),
+  details: () => [...userQueries.all(), 'detail'] as const,
+  detail: (id: number) =>
+    queryOptions({
+      queryKey: [...userQueries.details(), id],
+      queryFn: () => fetchUser(id),
+    }),
+}
+
+function Users() {
+  const { data } = useQuery(userQueries.list('active'))
+  return <div>{/* ... */}</div>
+}
+
+function User({ id }: { id: number }) {
+  const { data } = useQuery(userQueries.detail(id))
+  return <div>{/* ... */}</div>
+}
+```
+
+## Notes
+
+- `queryOptions` is an identity function that returns the exact object passed to it.
+- Its primary purpose is to improve TypeScript type inference and provide better autocomplete.
+- It's particularly useful when you want to share query configurations across multiple components or files.
+- The function adds type annotations to the `queryKey` that can be used for type-safe query invalidation and prefetching.
+- This pattern is recommended for organizing and reusing query configurations in larger applications.

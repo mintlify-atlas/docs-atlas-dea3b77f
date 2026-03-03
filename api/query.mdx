@@ -1,0 +1,437 @@
+---
+title: Query
+description: Core class representing a single query instance
+---
+
+# Query
+
+The `Query` class represents a single query instance in the cache. It manages the lifecycle of a query, including fetching, caching, and state management.
+
+## Import
+
+```tsx
+import { Query } from '@tanstack/query-core'
+```
+
+## Constructor
+
+```tsx
+class Query<
+  TQueryFnData = unknown,
+  TError = DefaultError,
+  TData = TQueryFnData,
+  TQueryKey extends QueryKey = QueryKey,
+> {
+  constructor(config: QueryConfig<TQueryFnData, TError, TData, TQueryKey>)
+}
+```
+
+## Type Parameters
+
+<ParamField path="TQueryFnData" type="type" default="unknown">
+  The type of data returned by the query function
+</ParamField>
+
+<ParamField path="TError" type="type" default="DefaultError">
+  The type of error that can be thrown
+</ParamField>
+
+<ParamField path="TData" type="type" default="TQueryFnData">
+  The type of data after transformation
+</ParamField>
+
+<ParamField path="TQueryKey" type="type" default="QueryKey">
+  The type of the query key
+</ParamField>
+
+## Properties
+
+### state
+
+```tsx
+state: QueryState<TData, TError>
+```
+
+The current state of the query.
+
+```tsx
+interface QueryState<TData = unknown, TError = DefaultError> {
+  data: TData | undefined
+  dataUpdateCount: number
+  dataUpdatedAt: number
+  error: TError | null
+  errorUpdateCount: number
+  errorUpdatedAt: number
+  fetchFailureCount: number
+  fetchFailureReason: TError | null
+  fetchMeta: FetchMeta | null
+  isInvalidated: boolean
+  status: 'pending' | 'error' | 'success'
+  fetchStatus: 'fetching' | 'paused' | 'idle'
+}
+```
+
+### queryKey
+
+```tsx
+queryKey: TQueryKey
+```
+
+The unique key for this query.
+
+### queryHash
+
+```tsx
+queryHash: string
+```
+
+A hashed version of the query key used for internal lookups.
+
+### options
+
+```tsx
+options: QueryOptions<TQueryFnData, TError, TData, TQueryKey>
+```
+
+The query configuration options.
+
+## Methods
+
+### fetch
+
+```tsx
+fetch(
+  options?: QueryOptions<TQueryFnData, TError, TData, TQueryKey>,
+  fetchOptions?: FetchOptions
+): Promise<TData>
+```
+
+Fetch or refetch the query data.
+
+### cancel
+
+```tsx
+cancel(options?: CancelOptions): Promise<void>
+```
+
+Cancel any ongoing query fetches.
+
+### invalidate
+
+```tsx
+invalidate(): void
+```
+
+Mark the query as stale/invalidated.
+
+### setState
+
+```tsx
+setState(
+  state: QueryState<TData, TError>,
+  options?: SetStateOptions
+): void
+```
+
+Update the query state.
+
+### setData
+
+```tsx
+setData(
+  updater: Updater<TData | undefined, TData | undefined>,
+  options?: SetDataOptions
+): TData | undefined
+```
+
+Manually set the query data.
+
+### isStale
+
+```tsx
+isStale(): boolean
+```
+
+Check if the query is stale based on staleTime.
+
+### isStaleByTime
+
+```tsx
+isStaleByTime(staleTime?: number): boolean
+```
+
+Check if the query is stale based on a specific stale time.
+
+### destroy
+
+```tsx
+destroy(): void
+```
+
+Clean up and remove the query.
+
+## Examples
+
+### Accessing Query State
+
+```tsx
+import { QueryClient } from '@tanstack/query-core'
+
+const queryClient = new QueryClient()
+const queryCache = queryClient.getQueryCache()
+
+// Get a specific query
+const query = queryCache.find({ queryKey: ['posts'] })
+
+if (query) {
+  console.log('Query Key:', query.queryKey)
+  console.log('Query Hash:', query.queryHash)
+  console.log('Status:', query.state.status)
+  console.log('Data:', query.state.data)
+  console.log('Error:', query.state.error)
+  console.log('Fetch Status:', query.state.fetchStatus)
+  console.log('Is Stale:', query.isStale())
+}
+```
+
+### Finding Queries
+
+```tsx
+import { QueryClient } from '@tanstack/query-core'
+
+const queryClient = new QueryClient()
+const queryCache = queryClient.getQueryCache()
+
+// Get all queries
+const allQueries = queryCache.getAll()
+
+// Find queries by partial key
+const postQueries = queryCache.findAll({ queryKey: ['posts'] })
+
+// Find with predicate
+const staleQueries = queryCache.findAll({
+  predicate: (query) => query.isStale(),
+})
+
+console.log(`Total queries: ${allQueries.length}`)
+console.log(`Post queries: ${postQueries.length}`)
+console.log(`Stale queries: ${staleQueries.length}`)
+```
+
+### Manually Invalidating Queries
+
+```tsx
+import { QueryClient } from '@tanstack/query-core'
+
+const queryClient = new QueryClient()
+const query = queryClient.getQueryCache().find({ queryKey: ['posts'] })
+
+if (query) {
+  // Mark as stale
+  query.invalidate()
+  
+  // Refetch if there are active observers
+  query.fetch()
+}
+```
+
+### Setting Query Data Manually
+
+```tsx
+import { QueryClient } from '@tanstack/query-core'
+
+const queryClient = new QueryClient()
+const query = queryClient.getQueryCache().find({ queryKey: ['post', 1] })
+
+if (query) {
+  // Set data directly
+  query.setData({ id: 1, title: 'Updated Title' })
+  
+  // Or use an updater function
+  query.setData((oldData) => ({
+    ...oldData,
+    title: 'Updated Title',
+  }))
+}
+```
+
+### Checking Query Staleness
+
+```tsx
+import { QueryClient } from '@tanstack/query-core'
+
+const queryClient = new QueryClient()
+const query = queryClient.getQueryCache().find({ queryKey: ['posts'] })
+
+if (query) {
+  // Check with default staleTime
+  const isStale = query.isStale()
+  
+  // Check with custom staleTime (5 minutes)
+  const isStaleByTime = query.isStaleByTime(5 * 60 * 1000)
+  
+  console.log('Is stale (default):', isStale)
+  console.log('Is stale (5 min):', isStaleByTime)
+}
+```
+
+### Subscribing to Query Changes
+
+```tsx
+import { QueryClient } from '@tanstack/query-core'
+
+const queryClient = new QueryClient()
+const queryCache = queryClient.getQueryCache()
+
+// Subscribe to all query changes
+const unsubscribe = queryCache.subscribe((event) => {
+  console.log('Event type:', event.type)
+  console.log('Query:', event.query.queryKey)
+  console.log('Status:', event.query.state.status)
+})
+
+// Clean up
+unsubscribe()
+```
+
+### Canceling Queries
+
+```tsx
+import { QueryClient } from '@tanstack/query-core'
+
+const queryClient = new QueryClient()
+
+// Cancel all queries
+await queryClient.cancelQueries()
+
+// Cancel specific queries
+await queryClient.cancelQueries({ queryKey: ['posts'] })
+
+// Or cancel directly on the query
+const query = queryClient.getQueryCache().find({ queryKey: ['posts'] })
+if (query) {
+  await query.cancel()
+}
+```
+
+### Removing Queries
+
+```tsx
+import { QueryClient } from '@tanstack/query-core'
+
+const queryClient = new QueryClient()
+const query = queryClient.getQueryCache().find({ queryKey: ['posts'] })
+
+if (query) {
+  // Remove the query from cache
+  query.destroy()
+  
+  // Or use queryClient methods
+  queryClient.removeQueries({ queryKey: ['posts'] })
+}
+```
+
+### Query Metadata
+
+```tsx
+import { QueryClient } from '@tanstack/query-core'
+
+const queryClient = new QueryClient()
+const query = queryClient.getQueryCache().find({ queryKey: ['posts'] })
+
+if (query) {
+  console.log('Data Update Count:', query.state.dataUpdateCount)
+  console.log('Data Updated At:', new Date(query.state.dataUpdatedAt))
+  console.log('Error Update Count:', query.state.errorUpdateCount)
+  console.log('Fetch Failure Count:', query.state.fetchFailureCount)
+  console.log('Is Invalidated:', query.state.isInvalidated)
+}
+```
+
+### Fetching with Options
+
+```tsx
+import { QueryClient } from '@tanstack/query-core'
+
+const queryClient = new QueryClient()
+const query = queryClient.getQueryCache().find({ queryKey: ['posts'] })
+
+if (query) {
+  // Fetch with custom options
+  await query.fetch({
+    queryFn: () => fetchPosts(),
+    staleTime: 60 * 1000,
+    gcTime: 5 * 60 * 1000,
+  })
+  
+  // Fetch with meta information
+  await query.fetch(undefined, {
+    cancelRefetch: true,
+    meta: { requestId: '123' },
+  })
+}
+```
+
+## Query State
+
+The query state object contains:
+
+<ResponseField name="status" type="'pending' | 'error' | 'success'">
+  The current status of the query
+</ResponseField>
+
+<ResponseField name="fetchStatus" type="'fetching' | 'paused' | 'idle'">
+  The fetch status of the query
+</ResponseField>
+
+<ResponseField name="data" type="TData | undefined">
+  The data returned by the query function
+</ResponseField>
+
+<ResponseField name="error" type="TError | null">
+  The error thrown by the query function (only set on error)
+</ResponseField>
+
+<ResponseField name="dataUpdateCount" type="number">
+  The number of times the data has been updated
+</ResponseField>
+
+<ResponseField name="dataUpdatedAt" type="number">
+  Timestamp when data was last updated
+</ResponseField>
+
+<ResponseField name="errorUpdateCount" type="number">
+  The number of times the query has errored
+</ResponseField>
+
+<ResponseField name="errorUpdatedAt" type="number">
+  Timestamp when error was last updated
+</ResponseField>
+
+<ResponseField name="fetchFailureCount" type="number">
+  The number of consecutive fetch failures
+</ResponseField>
+
+<ResponseField name="fetchFailureReason" type="TError | null">
+  The reason for the last fetch failure
+</ResponseField>
+
+<ResponseField name="isInvalidated" type="boolean">
+  Whether the query has been invalidated
+</ResponseField>
+
+<ResponseField name="fetchMeta" type="FetchMeta | null">
+  Additional metadata about the fetch
+</ResponseField>
+
+## Notes
+
+- `Query` is a low-level class typically created and managed by `QueryCache`
+- Each unique query key gets its own `Query` instance
+- Queries are kept in cache based on `gcTime` (garbage collection time)
+- The `queryHash` is used for efficient internal lookups
+- Queries support multiple concurrent observers (e.g., multiple components using the same query)
+- State changes trigger notifications to observers and cache subscribers
+- Queries automatically refetch based on staleTime and other configuration
+- The `fetch()` method is used internally by observers to trigger data fetching
+- Use `QueryClient` methods instead of directly manipulating queries in most cases

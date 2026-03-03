@@ -1,0 +1,206 @@
+---
+title: useQueryErrorResetBoundary
+description: React hook for accessing error reset boundary context
+---
+
+# useQueryErrorResetBoundary
+
+The `useQueryErrorResetBoundary` hook provides access to the nearest `QueryErrorResetBoundary` context. It returns methods to reset queries and manage error boundary state.
+
+## Import
+
+```tsx
+import { useQueryErrorResetBoundary } from '@tanstack/react-query'
+```
+
+## Signature
+
+```tsx
+function useQueryErrorResetBoundary(): QueryErrorResetBoundaryValue
+```
+
+## Returns
+
+<ResponseField name="reset" type="() => void">
+  Call this function to reset all queries within the boundary and trigger error boundary reset
+</ResponseField>
+
+<ResponseField name="clearReset" type="() => void">
+  Manually clear the reset flag (usually handled automatically)
+</ResponseField>
+
+<ResponseField name="isReset" type="() => boolean">
+  Check if the boundary is currently in reset state
+</ResponseField>
+
+## Examples
+
+### Basic Usage
+
+```tsx
+import { useQueryErrorResetBoundary } from '@tanstack/react-query'
+import { ErrorBoundary } from 'react-error-boundary'
+
+function ErrorFallback({ error, resetErrorBoundary }) {
+  const { reset } = useQueryErrorResetBoundary()
+
+  return (
+    <div role="alert">
+      <p>Something went wrong:</p>
+      <pre>{error.message}</pre>
+      <button
+        onClick={() => {
+          // Reset queries and error boundary
+          reset()
+          resetErrorBoundary()
+        }}
+      >
+        Try again
+      </button>
+    </div>
+  )
+}
+
+function App() {
+  return (
+    <QueryErrorResetBoundary>
+      <ErrorBoundary FallbackComponent={ErrorFallback}>
+        <Page />
+      </ErrorBoundary>
+    </QueryErrorResetBoundary>
+  )
+}
+```
+
+### Custom Retry Button
+
+```tsx
+import { useQueryErrorResetBoundary } from '@tanstack/react-query'
+
+function RetryButton() {
+  const { reset } = useQueryErrorResetBoundary()
+
+  return (
+    <button onClick={reset}>
+      Retry Failed Queries
+    </button>
+  )
+}
+```
+
+### Checking Reset State
+
+```tsx
+import { useQueryErrorResetBoundary } from '@tanstack/react-query'
+
+function Component() {
+  const { reset, isReset } = useQueryErrorResetBoundary()
+
+  const handleRetry = () => {
+    if (isReset()) {
+      console.log('Already resetting')
+      return
+    }
+    reset()
+  }
+
+  return <button onClick={handleRetry}>Retry</button>
+}
+```
+
+### With Loading State
+
+```tsx
+import { useState } from 'react'
+import { useQueryErrorResetBoundary } from '@tanstack/react-query'
+
+function ErrorFallback({ error, resetErrorBoundary }) {
+  const { reset } = useQueryErrorResetBoundary()
+  const [isRetrying, setIsRetrying] = useState(false)
+
+  const handleRetry = async () => {
+    setIsRetrying(true)
+    reset()
+    resetErrorBoundary()
+    // Reset will clear when queries retry
+  }
+
+  return (
+    <div>
+      <p>Error: {error.message}</p>
+      <button onClick={handleRetry} disabled={isRetrying}>
+        {isRetrying ? 'Retrying...' : 'Retry'}
+      </button>
+    </div>
+  )
+}
+```
+
+### Multiple Reset Actions
+
+```tsx
+import { useQueryErrorResetBoundary } from '@tanstack/react-query'
+import { useQueryClient } from '@tanstack/react-query'
+
+function ErrorFallback({ error, resetErrorBoundary }) {
+  const { reset } = useQueryErrorResetBoundary()
+  const queryClient = useQueryClient()
+
+  const handleRetry = () => {
+    reset()
+    resetErrorBoundary()
+  }
+
+  const handleClearAndRetry = () => {
+    // Clear all caches and retry
+    queryClient.clear()
+    reset()
+    resetErrorBoundary()
+  }
+
+  return (
+    <div>
+      <p>Error: {error.message}</p>
+      <button onClick={handleRetry}>Retry</button>
+      <button onClick={handleClearAndRetry}>Clear Cache & Retry</button>
+    </div>
+  )
+}
+```
+
+### Conditional Reset
+
+```tsx
+import { useQueryErrorResetBoundary } from '@tanstack/react-query'
+
+function ErrorFallback({ error, resetErrorBoundary }) {
+  const { reset } = useQueryErrorResetBoundary()
+
+  const handleRetry = () => {
+    if (error.message.includes('network')) {
+      // Only reset for network errors
+      reset()
+      resetErrorBoundary()
+    } else {
+      // For other errors, just reset the boundary
+      resetErrorBoundary()
+    }
+  }
+
+  return (
+    <div>
+      <p>Error: {error.message}</p>
+      <button onClick={handleRetry}>Retry</button>
+    </div>
+  )
+}
+```
+
+## Notes
+
+- Must be used within a `QueryErrorResetBoundary` component
+- The `reset()` function triggers all queries within the boundary to retry
+- Commonly used in Error Boundary fallback components
+- The reset state is automatically cleared after queries have retried
+- Can be called multiple times safely
+- Works with nested boundaries - only affects queries within the nearest boundary

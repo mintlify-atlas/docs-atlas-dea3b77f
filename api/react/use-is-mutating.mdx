@@ -1,0 +1,301 @@
+---
+title: useIsMutating
+description: React hook for tracking the number of pending mutations
+---
+
+# useIsMutating
+
+The `useIsMutating` hook returns the number of mutations that are currently pending (executing). This is useful for showing a global loading indicator for mutations.
+
+## Import
+
+```tsx
+import { useIsMutating } from '@tanstack/react-query'
+```
+
+## Signature
+
+```tsx
+function useIsMutating(
+  filters?: MutationFilters,
+  queryClient?: QueryClient,
+): number
+```
+
+## Parameters
+
+<ParamField path="filters" type="MutationFilters">
+  Optional filters to narrow down which mutations to count
+  
+  <ParamField path="mutationKey" type="MutationKey">
+    Filter by mutation key
+  </ParamField>
+  
+  <ParamField path="exact" type="boolean">
+    If true, only match mutations with the exact mutation key
+  </ParamField>
+  
+  <ParamField path="predicate" type="(mutation: Mutation) => boolean">
+    Custom predicate function to filter mutations
+  </ParamField>
+  
+  <ParamField path="status" type="MutationStatus">
+    Filter by mutation status: 'idle', 'pending', 'success', or 'error'
+  </ParamField>
+</ParamField>
+
+<ParamField path="queryClient" type="QueryClient">
+  Optional QueryClient instance. If not provided, uses the context client.
+</ParamField>
+
+## Returns
+
+<ResponseField name="count" type="number">
+  The number of pending mutations that match the filters
+</ResponseField>
+
+## Examples
+
+### Global Mutation Indicator
+
+```tsx
+import { useIsMutating } from '@tanstack/react-query'
+
+function GlobalSavingIndicator() {
+  const isMutating = useIsMutating()
+
+  return isMutating > 0 ? (
+    <div className="saving-indicator">
+      Saving...
+    </div>
+  ) : null
+}
+```
+
+### In App Layout
+
+```tsx
+import { useIsMutating } from '@tanstack/react-query'
+
+function AppLayout({ children }) {
+  const isMutating = useIsMutating()
+
+  return (
+    <div>
+      <header>
+        <h1>My App</h1>
+        {isMutating > 0 && (
+          <div className="saving-badge">
+            {isMutating} {isMutating === 1 ? 'change' : 'changes'} saving...
+          </div>
+        )}
+      </header>
+      <main>{children}</main>
+    </div>
+  )
+}
+```
+
+### Filter by Mutation Key
+
+```tsx
+import { useIsMutating } from '@tanstack/react-query'
+
+function PostEditor() {
+  // Only count mutations for saving posts
+  const isSavingPost = useIsMutating({ mutationKey: ['posts', 'save'] })
+
+  return (
+    <div>
+      <h2>Edit Post</h2>
+      {isSavingPost > 0 && <p>Saving...</p>}
+      <PostForm />
+    </div>
+  )
+}
+```
+
+### Multiple Mutation Indicators
+
+```tsx
+import { useIsMutating } from '@tanstack/react-query'
+
+function Dashboard() {
+  const totalMutating = useIsMutating()
+  const savingPosts = useIsMutating({ mutationKey: ['posts'] })
+  const savingUsers = useIsMutating({ mutationKey: ['users'] })
+
+  return (
+    <div>
+      <header>
+        {totalMutating > 0 && (
+          <div>Saving {totalMutating} items...</div>
+        )}
+      </header>
+      
+      <div>
+        <h2>Posts {savingPosts > 0 && '(Saving...)'}</h2>
+        <Posts />
+      </div>
+      
+      <div>
+        <h2>Users {savingUsers > 0 && '(Saving...)'}</h2>
+        <Users />
+      </div>
+    </div>
+  )
+}
+```
+
+### Prevent Navigation
+
+```tsx
+import { useEffect } from 'react'
+import { useIsMutating } from '@tanstack/react-query'
+import { useBlocker } from 'react-router-dom'
+
+function Form() {
+  const isMutating = useIsMutating()
+
+  // Block navigation if mutations are pending
+  const blocker = useBlocker(isMutating > 0)
+
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isMutating > 0) {
+        e.preventDefault()
+        e.returnValue = ''
+      }
+    }
+
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [isMutating])
+
+  return <div>{/* form fields */}</div>
+}
+```
+
+### Show Success Message
+
+```tsx
+import { useState, useEffect } from 'react'
+import { useIsMutating } from '@tanstack/react-query'
+
+function SaveIndicator() {
+  const isMutating = useIsMutating()
+  const [showSuccess, setShowSuccess] = useState(false)
+
+  useEffect(() => {
+    if (isMutating === 0 && showSuccess) {
+      // Hide success message after 2 seconds
+      const timer = setTimeout(() => setShowSuccess(false), 2000)
+      return () => clearTimeout(timer)
+    } else if (isMutating > 0) {
+      setShowSuccess(false)
+    }
+  }, [isMutating, showSuccess])
+
+  useEffect(() => {
+    if (isMutating === 0) {
+      setShowSuccess(true)
+    }
+  }, [isMutating])
+
+  return (
+    <div>
+      {isMutating > 0 && <div>Saving...</div>}
+      {showSuccess && <div>Saved!</div>}
+    </div>
+  )
+}
+```
+
+### Disable Buttons During Mutations
+
+```tsx
+import { useIsMutating } from '@tanstack/react-query'
+
+function ActionButtons() {
+  const isMutating = useIsMutating({ mutationKey: ['posts'] })
+
+  return (
+    <div>
+      <button disabled={isMutating > 0}>New Post</button>
+      <button disabled={isMutating > 0}>Delete All</button>
+    </div>
+  )
+}
+```
+
+### With Custom Predicate
+
+```tsx
+import { useIsMutating } from '@tanstack/react-query'
+
+function Component() {
+  // Count only failed mutations that are retrying
+  const retryingMutations = useIsMutating({
+    predicate: (mutation) =>
+      mutation.state.status === 'pending' &&
+      mutation.state.failureCount > 0,
+  })
+
+  return (
+    <div>
+      {retryingMutations > 0 && (
+        <p>Retrying {retryingMutations} failed operations...</p>
+      )}
+    </div>
+  )
+}
+```
+
+### Combined with Query Fetching
+
+```tsx
+import { useIsFetching, useIsMutating } from '@tanstack/react-query'
+
+function GlobalActivityIndicator() {
+  const isFetching = useIsFetching()
+  const isMutating = useIsMutating()
+  const isActive = isFetching > 0 || isMutating > 0
+
+  if (!isActive) return null
+
+  return (
+    <div className="activity-indicator">
+      {isFetching > 0 && <span>Loading {isFetching} queries</span>}
+      {isMutating > 0 && <span>Saving {isMutating} changes</span>}
+    </div>
+  )
+}
+```
+
+### Exact Mutation Key Match
+
+```tsx
+import { useIsMutating } from '@tanstack/react-query'
+
+function Component() {
+  // Only count mutations with exact key ['posts', 'update', 123]
+  const isSaving = useIsMutating({
+    mutationKey: ['posts', 'update', 123],
+    exact: true,
+  })
+
+  return <div>{isSaving > 0 ? 'Saving this post...' : 'Saved'}</div>
+}
+```
+
+## Notes
+
+- The hook uses `useMutationState` internally to track mutations
+- Only counts mutations with `status: 'pending'` by default
+- Returns `0` when no mutations are pending
+- Updates automatically when mutations start or complete
+- Can be used multiple times with different filters in the same component
+- Useful for implementing global or section-specific save indicators
+- The count includes all pending mutations that match the filters
+- Does not cause re-renders unless the count actually changes
+- Internally implemented using `useMutationState` with a pending status filter

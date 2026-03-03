@@ -1,0 +1,182 @@
+---
+title: usePrefetchQuery
+description: React hook for prefetching queries during render
+---
+
+# usePrefetchQuery
+
+The `usePrefetchQuery` hook allows you to prefetch a query during component render. This is useful for prefetching data that you know will be needed soon, such as when hovering over a link.
+
+## Import
+
+```tsx
+import { usePrefetchQuery } from '@tanstack/react-query'
+```
+
+## Signature
+
+```tsx
+function usePrefetchQuery<
+  TQueryFnData = unknown,
+  TError = DefaultError,
+  TData = TQueryFnData,
+  TQueryKey extends QueryKey = QueryKey,
+>(
+  options: UsePrefetchQueryOptions<TQueryFnData, TError, TData, TQueryKey>,
+  queryClient?: QueryClient,
+): void
+```
+
+## Type Parameters
+
+<ParamField path="TQueryFnData" type="type" default="unknown">
+  The type of data returned by the query function
+</ParamField>
+
+<ParamField path="TError" type="type" default="DefaultError">
+  The type of error that can be thrown by the query function
+</ParamField>
+
+<ParamField path="TData" type="type" default="TQueryFnData">
+  The type of data after transformation
+</ParamField>
+
+<ParamField path="TQueryKey" type="type" default="QueryKey">
+  The type of the query key
+</ParamField>
+
+## Parameters
+
+<ParamField path="options" type="UsePrefetchQueryOptions" required>
+  Configuration options for the query to prefetch. Accepts the same options as `useQuery`.
+
+  <ParamField path="queryKey" type="TQueryKey" required>
+    A unique key for the query. Must be an array.
+  </ParamField>
+
+  <ParamField path="queryFn" type="QueryFunction<TQueryFnData, TQueryKey>" required>
+    The function that will be called to fetch data.
+  </ParamField>
+
+  <ParamField path="staleTime" type="number | ((query: Query) => number)">
+    Time in milliseconds after data is considered stale
+  </ParamField>
+
+  <ParamField path="gcTime" type="number">
+    Time in milliseconds that unused/inactive cache data remains in memory
+  </ParamField>
+</ParamField>
+
+<ParamField path="queryClient" type="QueryClient">
+  Optional QueryClient instance to use. If not provided, the context client is used.
+</ParamField>
+
+## Returns
+
+This hook does not return anything (`void`). It only triggers a prefetch if the query does not already exist in the cache.
+
+## Examples
+
+### Basic Usage
+
+```tsx
+import { usePrefetchQuery } from '@tanstack/react-query'
+
+function PostLink({ id }: { id: number }) {
+  // Prefetch the post when the component mounts
+  usePrefetchQuery({
+    queryKey: ['post', id],
+    queryFn: () => fetchPost(id),
+  })
+
+  return <Link to={`/posts/${id}`}>View Post</Link>
+}
+```
+
+### Prefetch on Hover
+
+```tsx
+import { useState } from 'react'
+import { usePrefetchQuery } from '@tanstack/react-query'
+
+function PostLink({ id }: { id: number }) {
+  const [shouldPrefetch, setShouldPrefetch] = useState(false)
+
+  // Only prefetch when hovering
+  if (shouldPrefetch) {
+    usePrefetchQuery({
+      queryKey: ['post', id],
+      queryFn: () => fetchPost(id),
+    })
+  }
+
+  return (
+    <Link
+      to={`/posts/${id}`}
+      onMouseEnter={() => setShouldPrefetch(true)}
+    >
+      View Post
+    </Link>
+  )
+}
+```
+
+### With Custom Stale Time
+
+```tsx
+import { usePrefetchQuery } from '@tanstack/react-query'
+
+function PostPreview({ id }: { id: number }) {
+  // Prefetch with a longer stale time
+  usePrefetchQuery({
+    queryKey: ['post', id],
+    queryFn: () => fetchPost(id),
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  })
+
+  return <div>Post Preview</div>
+}
+```
+
+### List with Prefetching
+
+```tsx
+import { usePrefetchQuery, useQuery } from '@tanstack/react-query'
+
+function PostList() {
+  const { data: posts } = useQuery({
+    queryKey: ['posts'],
+    queryFn: fetchPosts,
+  })
+
+  return (
+    <div>
+      {posts?.map((post) => (
+        <PostItem key={post.id} post={post} />
+      ))}
+    </div>
+  )
+}
+
+function PostItem({ post }: { post: Post }) {
+  // Prefetch each post's details
+  usePrefetchQuery({
+    queryKey: ['post', post.id],
+    queryFn: () => fetchPostDetails(post.id),
+  })
+
+  return (
+    <Link to={`/posts/${post.id}`}>
+      {post.title}
+    </Link>
+  )
+}
+```
+
+## Notes
+
+- The hook only prefetches if the query doesn't already exist in the cache (checked via `queryClient.getQueryState`).
+- This hook is designed to be used during render, making it safe to use in component bodies.
+- For event-based prefetching (like onClick), consider using `queryClient.prefetchQuery` directly instead.
+- The prefetch is fire-and-forget; you don't get access to the loading state or data.
+- If you need to access the query state, use `useQuery` instead.

@@ -1,0 +1,322 @@
+---
+title: infiniteQueryOptions
+description: Type-safe helper for defining infinite query options
+---
+
+# infiniteQueryOptions
+
+The `infiniteQueryOptions` helper provides type-safe infinite query options with proper type inference. It's a lightweight identity function that helps TypeScript infer types correctly and provides better autocomplete for infinite queries.
+
+## Import
+
+```tsx
+import { infiniteQueryOptions } from '@tanstack/react-query'
+```
+
+## Signature
+
+```tsx
+function infiniteQueryOptions<
+  TQueryFnData,
+  TError = DefaultError,
+  TData = InfiniteData<TQueryFnData>,
+  TQueryKey extends QueryKey = QueryKey,
+  TPageParam = unknown,
+>(
+  options: UseInfiniteQueryOptions<
+    TQueryFnData,
+    TError,
+    TData,
+    TQueryKey,
+    TPageParam
+  >
+): UseInfiniteQueryOptions<
+  TQueryFnData,
+  TError,
+  TData,
+  TQueryKey,
+  TPageParam
+> & {
+  queryKey: DataTag<TQueryKey, InfiniteData<TQueryFnData>, TError>
+}
+```
+
+## Type Parameters
+
+<ParamField path="TQueryFnData" type="type">
+  The type of data returned by the query function for each page
+</ParamField>
+
+<ParamField path="TError" type="type" default="DefaultError">
+  The type of error that can be thrown by the query function
+</ParamField>
+
+<ParamField path="TData" type="type" default="InfiniteData<TQueryFnData>">
+  The type of data after transformation by the select function
+</ParamField>
+
+<ParamField path="TQueryKey" type="type" default="QueryKey">
+  The type of the query key
+</ParamField>
+
+<ParamField path="TPageParam" type="type" default="unknown">
+  The type of the page parameter
+</ParamField>
+
+## Parameters
+
+<ParamField path="options" type="UseInfiniteQueryOptions" required>
+  Infinite query configuration options. Accepts all options that `useInfiniteQuery` accepts.
+
+  <ParamField path="queryKey" type="TQueryKey" required>
+    A unique key for the query
+  </ParamField>
+
+  <ParamField path="queryFn" type="QueryFunction<TQueryFnData, TQueryKey>" required>
+    The function that fetches a page of data
+  </ParamField>
+
+  <ParamField path="initialPageParam" type="TPageParam" required>
+    The initial page parameter
+  </ParamField>
+
+  <ParamField path="getNextPageParam" type="(lastPage: TQueryFnData, allPages: TQueryFnData[], lastPageParam: TPageParam, allPageParams: TPageParam[]) => TPageParam | undefined | null" required>
+    Function to get the next page parameter
+  </ParamField>
+
+  <ParamField path="getPreviousPageParam" type="(firstPage: TQueryFnData, allPages: TQueryFnData[], firstPageParam: TPageParam, allPageParams: TPageParam[]) => TPageParam | undefined | null">
+    Function to get the previous page parameter
+  </ParamField>
+</ParamField>
+
+## Returns
+
+Returns the same options object that was passed in, with enhanced type information for better TypeScript inference.
+
+## Examples
+
+### Basic Usage
+
+```tsx
+import { infiniteQueryOptions, useInfiniteQuery } from '@tanstack/react-query'
+
+const projectsInfiniteOptions = infiniteQueryOptions({
+  queryKey: ['projects'],
+  queryFn: async ({ pageParam }) => {
+    const res = await fetch(`/api/projects?cursor=${pageParam}`)
+    return res.json()
+  },
+  initialPageParam: 0,
+  getNextPageParam: (lastPage) => lastPage.nextCursor,
+})
+
+function Projects() {
+  const { data, fetchNextPage, hasNextPage } = useInfiniteQuery(
+    projectsInfiniteOptions
+  )
+  
+  return <div>{/* render pages */}</div>
+}
+```
+
+### Reusable Infinite Query Definitions
+
+```tsx
+import { infiniteQueryOptions, useInfiniteQuery } from '@tanstack/react-query'
+
+interface Project {
+  id: number
+  name: string
+}
+
+interface ProjectsResponse {
+  projects: Project[]
+  nextCursor?: number
+}
+
+const projectQueries = {
+  all: infiniteQueryOptions({
+    queryKey: ['projects'],
+    queryFn: async ({ pageParam }): Promise<ProjectsResponse> => {
+      const res = await fetch(`/api/projects?cursor=${pageParam}`)
+      return res.json()
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+    getPreviousPageParam: (firstPage) => firstPage.previousCursor,
+  }),
+  byCategory: (category: string) => infiniteQueryOptions({
+    queryKey: ['projects', category],
+    queryFn: async ({ pageParam }) => {
+      const res = await fetch(
+        `/api/projects?category=${category}&cursor=${pageParam}`
+      )
+      return res.json()
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+  }),
+}
+
+// Use in components
+function Projects() {
+  const { data } = useInfiniteQuery(projectQueries.all)
+  return <div>{/* ... */}</div>
+}
+
+function CategoryProjects({ category }: { category: string }) {
+  const { data } = useInfiniteQuery(projectQueries.byCategory(category))
+  return <div>{/* ... */}</div>
+}
+```
+
+### With Type Inference
+
+```tsx
+import { infiniteQueryOptions, useInfiniteQuery } from '@tanstack/react-query'
+
+interface Post {
+  id: number
+  title: string
+  body: string
+}
+
+interface PostsPage {
+  posts: Post[]
+  nextCursor?: number
+}
+
+const postsInfiniteOptions = infiniteQueryOptions({
+  queryKey: ['posts'],
+  queryFn: async ({ pageParam }): Promise<PostsPage> => {
+    const res = await fetch(`/api/posts?cursor=${pageParam}`)
+    return res.json()
+  },
+  initialPageParam: 0,
+  getNextPageParam: (lastPage) => lastPage.nextCursor,
+})
+
+function Posts() {
+  // TypeScript knows the structure of data
+  const { data, fetchNextPage, hasNextPage } = useInfiniteQuery(
+    postsInfiniteOptions
+  )
+  
+  return (
+    <div>
+      {data?.pages.map((page) => (
+        page.posts.map((post) => (
+          <div key={post.id}>{post.title}</div>
+        ))
+      ))}
+      {hasNextPage && (
+        <button onClick={() => fetchNextPage()}>Load More</button>
+      )}
+    </div>
+  )
+}
+```
+
+### With Select Function
+
+```tsx
+import { infiniteQueryOptions, useInfiniteQuery } from '@tanstack/react-query'
+
+const flatPostsOptions = infiniteQueryOptions({
+  queryKey: ['posts'],
+  queryFn: ({ pageParam }) => fetchPostsPage(pageParam),
+  initialPageParam: 0,
+  getNextPageParam: (lastPage) => lastPage.nextCursor,
+  select: (data) => data.pages.flatMap((page) => page.posts),
+})
+
+function Posts() {
+  // data is now a flat array of posts
+  const { data } = useInfiniteQuery(flatPostsOptions)
+  return <div>{/* ... */}</div>
+}
+```
+
+### With QueryClient Methods
+
+```tsx
+import {
+  infiniteQueryOptions,
+  useQueryClient,
+  useInfiniteQuery,
+} from '@tanstack/react-query'
+
+const projectsOptions = infiniteQueryOptions({
+  queryKey: ['projects'],
+  queryFn: ({ pageParam }) => fetchProjects(pageParam),
+  initialPageParam: 0,
+  getNextPageParam: (lastPage) => lastPage.nextCursor,
+})
+
+function Projects() {
+  const queryClient = useQueryClient()
+  const { data } = useInfiniteQuery(projectsOptions)
+
+  const handleInvalidate = () => {
+    // Type-safe invalidation
+    queryClient.invalidateQueries(projectsOptions)
+  }
+
+  const handlePrefetch = () => {
+    // Type-safe prefetching
+    queryClient.prefetchInfiniteQuery(projectsOptions)
+  }
+
+  return <div>{/* ... */}</div>
+}
+```
+
+### Bidirectional Pagination
+
+```tsx
+import { infiniteQueryOptions, useInfiniteQuery } from '@tanstack/react-query'
+
+const messagesOptions = infiniteQueryOptions({
+  queryKey: ['messages'],
+  queryFn: async ({ pageParam }) => {
+    const res = await fetch(`/api/messages?cursor=${pageParam}`)
+    return res.json()
+  },
+  initialPageParam: 0,
+  getNextPageParam: (lastPage) => lastPage.nextCursor,
+  getPreviousPageParam: (firstPage) => firstPage.previousCursor,
+})
+
+function Messages() {
+  const {
+    data,
+    fetchNextPage,
+    fetchPreviousPage,
+    hasNextPage,
+    hasPreviousPage,
+  } = useInfiniteQuery(messagesOptions)
+
+  return (
+    <div>
+      {hasPreviousPage && (
+        <button onClick={() => fetchPreviousPage()}>Load Older</button>
+      )}
+      {data?.pages.map((page) => (
+        <div key={page.id}>{/* render messages */}</div>
+      ))}
+      {hasNextPage && (
+        <button onClick={() => fetchNextPage()}>Load Newer</button>
+      )}
+    </div>
+  )
+}
+```
+
+## Notes
+
+- `infiniteQueryOptions` is an identity function that returns the exact object passed to it.
+- Its primary purpose is to improve TypeScript type inference and provide better autocomplete.
+- It's particularly useful when you want to share infinite query configurations across multiple components or files.
+- The function adds type annotations to the `queryKey` that can be used for type-safe query invalidation and prefetching.
+- Always provide `initialPageParam` and `getNextPageParam` for infinite queries.
+- Use `getPreviousPageParam` if you need bidirectional pagination.
